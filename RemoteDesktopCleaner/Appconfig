@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+	<configSections>
+
+		<section name="system.data" type="System.Configuration.NameValueSectionHandler" />
+	</configSections>
+	<appSettings>
+		<add key="info-directory" value="C:\\Users\\pstojkov\\cernbox\\WINDOWS\\Desktop\\TSGatewayWebServ\\info" />
+		<add key="gatewayss" value="cerngt05,cerngt06,cerngt07,cerngt08" />
+		<add key="gateways" value="cerngt01" />
+		<add key="admins-email" value="petar.stojkovic@cern.ch" />
+		<add key="corebridge-url" value="http://localhost:5000" />
+	</appSettings>
+	<connectionStrings>
+		<add name="RapContext2" connectionString="server=dbod-remotedesktop.cern.ch;database=RemoteDesktop;uid=admin;password=oUgDdp5AnSzrvizXtN;port=5500" providerName="MySql.Data.MySqlClient" />
+	</connectionStrings>
+	<system.data>
+		<DbProviderFactories>
+			<remove invariant="MySql.Data.MySqlClient" />
+			<add name="MySQL Data Provider" invariant="MySql.Data.MySqlClient" description=".Net Framework Data Provider for MySQL" type="MySql.Data.MySqlClient.MySqlClientFactory, MySql.Data, Version=8.0.28.0, Culture=neutral, PublicKeyToken=c5687fc88969c44d" />
+		</DbProviderFactories>
+	</system.data>
+</configuration>
+<!--<section name="connectionStrings" type="System.Configuration.ConnectionStringsSection, System.Configuration, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />-->
