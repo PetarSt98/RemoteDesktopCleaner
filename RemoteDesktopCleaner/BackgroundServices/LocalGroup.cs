@@ -10,9 +10,16 @@ namespace RemoteDesktopCleaner.BackgroundServices
     {
         public static string OrphanedSid = "S-1-5-";
     }
+    public enum LocalGroupFlag
+    {
+        Add,
+        Delete,
+        Update,
+    }
     public class LocalGroup
     {
         public string Name { get; set; }
+        public LocalGroupFlag Flag { get; set; }
         public List<string> Computers { get; } = new List<string>();
         public List<string> Members { get; } = new List<string>();
         public List<string> Content => Computers.Concat(Members).ToList();
@@ -43,13 +50,18 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 sb.Append("Dead computer objects. ");
             return sb.ToString();
         }
+
         public LocalGroup() { }
 
         public LocalGroup(string name)
         {
             Name = name;
         }
-
+        public LocalGroup(string name, LocalGroupFlag flag)
+        {
+            Name = name;
+            Flag = flag;
+        }
         public LocalGroup(string name, IEnumerable<string> groupContent)
         {
             Name = name;
