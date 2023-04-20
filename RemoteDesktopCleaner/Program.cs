@@ -14,7 +14,8 @@ using RemoteDesktopCleaner.BackgroundServices;
 //using RemoteDesktopAccessCleaner.Modules.ActiveDirectory;
 //using RemoteDesktopAccessCleaner.Modules.ConfigProvider;
 //using RemoteDesktopAccessCleaner.Report;
-
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
 namespace RemoteDesktopCleaner
 {
     class Program
@@ -23,6 +24,7 @@ namespace RemoteDesktopCleaner
 
         static void Main(string[] args)
         {
+
             WebApi();
             //ConsoleApp();
         }

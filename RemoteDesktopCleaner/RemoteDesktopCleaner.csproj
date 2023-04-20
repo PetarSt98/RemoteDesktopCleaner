@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CliWrap" Version="3.6.0" />
     <PackageReference Include="EntityFramework" Version="6.4.4" />
     <PackageReference Include="Microsoft.AspNet.Cors" Version="5.2.9" />
     <PackageReference Include="Microsoft.AspNet.WebApi.Cors" Version="5.2.9" />
@@ -22,6 +23,15 @@
     <PackageReference Include="Microsoft.Owin" Version="4.2.2" />
     <PackageReference Include="Microsoft.Owin.Cors" Version="4.2.2" />
     <PackageReference Include="Microsoft.Owin.Hosting" Version="4.2.2" />
+    <PackageReference Include="Microsoft.PowerShell.Commands.Diagnostics" Version="7.2.11" />
+    <PackageReference Include="Microsoft.PowerShell.Commands.Management" Version="7.2.11" />
+    <PackageReference Include="Microsoft.PowerShell.Commands.Utility" Version="7.2.11" />
+    <PackageReference Include="Microsoft.PowerShell.ConsoleHost" Version="7.2.11" />
+    <PackageReference Include="Microsoft.PowerShell.CoreCLR.Eventing" Version="7.2.11" />
+    <PackageReference Include="Microsoft.PowerShell.Native" Version="7.3.2" />
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.3.4" />
+    <PackageReference Include="Microsoft.PowerShell.Security" Version="7.2.11" />
+    <PackageReference Include="Microsoft.WSMan.Management" Version="7.2.11" />
     <PackageReference Include="MySql.Data" Version="8.0.26" />
     <PackageReference Include="MySql.Data.EntityFramework" Version="8.0.26" />
     <PackageReference Include="MySqlConnector" Version="2.2.5" />
@@ -34,6 +44,8 @@
     <PackageReference Include="System.Data.SQLite.EF6" Version="1.0.117" />
     <PackageReference Include="System.DirectoryServices" Version="7.0.1" />
     <PackageReference Include="System.DirectoryServices.AccountManagement" Version="7.0.0" />
+    <PackageReference Include="System.Management" Version="7.0.1" />
+    <PackageReference Include="System.Management.Automation" Version="7.2.11" />
     <PackageReference Include="System.Net.Http" Version="4.3.4" />
     <PackageReference Include="System.ServiceModel.Duplex" Version="4.8.*" />
     <PackageReference Include="System.ServiceModel.Federation" Version="4.8.*" />
@@ -41,8 +53,13 @@
     <PackageReference Include="System.ServiceModel.NetTcp" Version="4.8.*" />
     <PackageReference Include="System.ServiceModel.Security" Version="4.8.*" />
     <PackageReference Include="System.Spatial" Version="5.8.5" />
+    <PackageReference Include="System.Web.Services.Description" Version="4.10.2" />
     <PackageReference Include="Unity" Version="5.11.10" />
     <PackageReference Include="Unity.WebAPI" Version="5.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Connected Services\" />
   </ItemGroup>
 
 </Project>
