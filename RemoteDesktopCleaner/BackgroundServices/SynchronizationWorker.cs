@@ -20,6 +20,8 @@ using System.Collections;
 using System.Text.Json;
 using System.DirectoryServices.AccountManagement;
 using RemoteDesktopCleaner.Data;
+using System.Text;
+
 namespace RemoteDesktopCleaner.BackgroundServices
 {
     public enum ObjectClass
@@ -93,7 +95,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 //_reporter.Start(serverName); // pravi se loger
                 Logger.Debug($"Starting the synchronization of '{serverName}' gateway.");
-                //var taskGtRapNames = GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
+                var taskGtRapNames = GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
                 if (DownloadGatewayConfig(serverName))
                 { // ako uspesno loadujes local group names i napravis LG objekte // ubaci da baci gresku ako je prazno
                     var cfgDiscrepancy = GetConfigDiscrepancy(serverName); // ovo je diff izmedju MODEL-a i CERNGT01, tj diff kojim treba CERNGT01 da se updatuje
@@ -104,7 +106,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     Logger.Info($"Awaiting getting gateway RAP names for '{serverName}'.");
                     //    var gatewayRapNames = await taskGtRapNames; // update server CERNGT01, get all raps from CERNGT01
                     //    Logger.Info($"Finished getting gateway RAP names for '{serverName}'.");
-                    //    _rapSynchronizer.SynchronizeRaps(serverName, allGatewayGroups, gatewayRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
+                    SynchronizeRaps(serverName, allGatewayGroups, taskGtRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
                 }
                 //_reporter.Finish(serverName); // create log file and send it to email
             }
@@ -135,15 +137,374 @@ namespace RemoteDesktopCleaner.BackgroundServices
             var addedGroups = AddNewGroups(serverName, groupsToAdd); // add the groups with '+' in the name
             SyncModifiedGroups(serverName, modifiedGroups); // update computers and members (add/delete) if LG does not have '+'or'-'
 
-            _reporter.Info(serverName, "Finished synchronizing groups.");
+            //_reporter.Info(serverName, "Finished synchronizing groups.");
             return addedGroups;
+        }
+        private void SyncModifiedGroups(string serverName, List<LocalGroup> modifiedGroups)
+        {
+            //_reporter.Info(serverName, $"Synchronizing content of {modifiedGroups.Count} groups.");
+            modifiedGroups.ForEach(lg => SyncGroupContent(lg, serverName));
+        }
+
+        private void SyncGroupContent(LocalGroup lg, string server)
+        {
+            //_reporter.Info(server, $"Synchronizing {lg.Name}.");
+            var success = true;
+            if (CleanFromOrphanedSids(lg.Name, server))
+            {
+                if (!SyncMember(lg, server))
+                    success = false;
+
+                if (!SyncComputers(lg, server))
+                    success = false;
+            }
+            else
+            {
+                //_logger.LogWarning($"Error while cleaning group: '{lg.Name}' from orphaned SIDs, further synchronization on this group is skipped.");
+                //_reporter.Error(server, $"Failed cleaning group '{lg.Name}' from orphaned SIDs.");
+                success = false;
+            }
+            //if (success) _reporter.IncrementSynchronizedGroups(server);
+        }
+        public bool CleanFromOrphanedSids(string groupName, string serverName)
+        {
+            try
+            {
+                bool success;
+                //_logger.LogDebug($"Cleaning group: '{groupName}' on gateway '{serverName}' from potential orphaned SIDs.");
+                using (var pc = new PrincipalContext(ContextType.Machine, serverName))
+                {
+                    var groupPrincipal = GroupPrincipal.FindByIdentity(pc, groupName);
+                    if (groupPrincipal == null)
+                    {
+                        //_logger.LogWarning($"There is no group: '{groupName}' on gateway: '{serverName}'.");
+                        return false;
+                    }
+                    var gp = (DirectoryEntry)groupPrincipal.GetUnderlyingObject();
+                    success = RemoveOrphanedSids(gp);
+                }
+
+                return success;
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogError(ex, $"Error while removing orphaned SIDs from group: '{groupName}' on gateway: '{serverName}'.");
+                return false;
+            }
+        }
+        private bool RemoveOrphanedSids(DirectoryEntry groupPrincipal)
+        {
+            var success = true;
+            foreach (var memberObj in (IEnumerable)groupPrincipal.Invoke("Members", null))
+            {
+                var member = new DirectoryEntry(memberObj);
+                if (!member.Name.StartsWith(Constants.OrphanedSid)) continue;
+                try
+                {
+                    //_logger.LogDebug($"Removing SID: '{member.Name}'.");
+                    groupPrincipal.Invoke("Remove", $"WinNT://{member.Name}");
+                }
+                catch (Exception ex)
+                {
+                    //_logger.LogWarning(ex, $"Failed removing SID: '{member.Name}'.");
+                    success = false;
+                }
+            }
+
+            return success;
+        }
+        private List<string> AddNewGroups(string serverName, ICollection<LocalGroup> groupsToAdd)
+        {
+            //_logger.LogInformation($"Adding {groupsToAdd.Count} new groups to the gateway '{serverName}'.");
+            //_reporter.Info(serverName, $"Adding {groupsToAdd.Count} new groups.");
+            var addedGroups = new List<string>();
+            foreach (var lg in groupsToAdd)
+            {
+                var formattedGroupName = FormatModifiedValue(lg.Name);
+                //_reporter.Info(serverName, $"Adding group '{formattedGroupName}'.");
+                if (AddNewGroupWithContent(serverName, lg))
+                    addedGroups.Add(formattedGroupName);
+            }
+            //_reporter.Info(serverName, $"Finished adding {addedGroups.Count} new groups.");
+            return addedGroups;
+        }
+        private bool AddNewGroupWithContent(string server, LocalGroup lg)
+        {
+            string groupName = FormatModifiedValue(lg.Name);
+            var success = true;
+            if (AddEmptyGroup(groupName, server))
+            {
+                if (!SyncMember(lg, server))
+                    success = false;
+                if (!SyncComputers(lg, server))
+                    success = false;
+            }
+            else
+            {
+                success = false;
+                //_reporter.Warn(server, $"Failed adding new group: '{groupName}' and its contents.");
+            }
+
+            //if (success) _reporter.IncrementAddedGroups(server);
+            return success;
+        }
+        private bool SyncComputers(LocalGroup lg, string server)
+        {
+            string groupName = FormatModifiedValue(lg.Name);
+            var success = true;
+            foreach (var computer in lg.Computers)
+            {
+                string computerName = FormatModifiedValue(computer);
+                if (ShouldBeDeleted(computer))
+                    success = success && DeleteComputer(server, groupName, computerName);
+                else if (ShouldBeAdded(computer))
+                    success = success && AddComputer(server, groupName, computerName);
+            }
+            //if (!success) _reporter.Warn(server, $"Failed synchronizing computers for group: '{groupName}'.");
+            return success;
+        }
+        private bool DeleteComputer(string server, string groupName, string computerName)
+        {
+            if (RemoveComputerFromLocalGroup(computerName, groupName, server)) return true;
+            //_logger.LogDebug($"Failed removing computer: '{computerName}' from group: '{groupName}' on gateway: '{server}'.");
+            return false;
+        }
+
+        private bool AddComputer(string server, string groupName, string computerName)
+        {
+            if (AddComputerToLocalGroup(computerName, groupName, server)) return true;
+            //_logger.LogDebug($"Failed adding new computer: '{computerName}' to group: '{groupName}' on gateway: '{server}'.");
+            return false;
+        }
+        public bool RemoveComputerFromLocalGroup(string computerName, string groupName, string serverName)
+        {
+            var success = true;
+            try
+            {
+                //_logger.LogDebug($"Removing computer: '{computerName}' from local group: '{groupName}' on gateway '{serverName}'.");
+                using (var pc = new PrincipalContext(ContextType.Machine, serverName))
+                {
+                    var gp = GroupPrincipal.FindByIdentity(pc, groupName);
+                    if (gp == null)
+                    {
+                        //_logger.LogDebug($"There is no group: '{groupName}' on gateway: '{serverName}'.");
+                        return false;
+                    }
+
+                    var groupEntry = (DirectoryEntry)gp.GetUnderlyingObject();
+                    if (ExistsInGroup(gp, computerName))
+                        groupEntry.Invoke("Remove", $"WinNT://CERN/{computerName},computer");
+                    //else
+                        //_logger.LogDebug($"'{computerName}' is not a member of the group '{groupName}' on gateway '{serverName}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogError(ex, "Error while removing computer '{computerName}' from local group '{groupName}' on gateway '{serverName}'.");
+                success = false;
+            }
+
+            return success;
+        }
+
+        public bool AddComputerToLocalGroup(string computerName, string groupName, string serverName)
+        {
+            bool success;
+            //_logger.LogDebug($"Adding new computer '{computerName}' to the group '{groupName}' on gateway '{serverName}'.");
+            try
+            {
+                using (var pc = new PrincipalContext(ContextType.Machine, serverName))
+                {
+                    var gp = GroupPrincipal.FindByIdentity(pc, groupName);
+                    if (gp == null)
+                    {
+                        //_logger.LogDebug($"There is no group: '{groupName}' on gateway: '{serverName}'.");
+                        return false;
+                    }
+
+                    var groupEntry = (DirectoryEntry)gp.GetUnderlyingObject();
+                    if (!ExistsInGroup(gp, computerName))
+                        groupEntry.Invoke("Add", $"WinNT://CERN/{computerName},computer");
+                    //else
+                        //_logger.LogDebug($"'{computerName}' is already in the group '{groupName}' on gateway '{serverName}'.");
+                }
+
+                success = true;
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogError(ex, $"Error adding new computer '{computerName}' to the group '{groupName}' on gateway '{serverName}'.");
+                success = false;
+            }
+
+            return success;
+        }
+        private bool SyncMember(LocalGroup lg, string server)
+        {
+            var success = true;
+            string groupName = FormatModifiedValue(lg.Name);
+            foreach (var member in lg.Members.Where(m => !m.StartsWith(Constants.OrphanedSid)))
+            {
+                string memberName = FormatModifiedValue(member);
+                if (ShouldBeDeleted(member))
+                    success = DeleteMember(server, groupName, memberName);
+                else if (ShouldBeAdded(member))
+                    success = AddMember(server, groupName, memberName);
+            }
+            //if (!success) _reporter.Warn(server, $"Failed synchronizing members for group '{groupName}'.");
+            return success;
+        }
+        private bool DeleteMember(string server, string groupName, string memberName)
+        {
+            if (RemoveMemberFromLocalGroup(memberName, groupName, server)) return true;
+            //_logger.LogDebug($"Failed removing member: '{memberName}' from group: '{groupName}' on gateway: '{server}'.");
+            return false;
+        }
+
+        private bool AddMember(string server, string groupName, string memberName)
+        {
+            if (AddMemberToLocalGroup(memberName, groupName, server)) return true;
+            //_logger.LogDebug($"Failed adding new member: '{memberName}' to group: '{groupName}' on gateway: '{server}'.");
+            return false;
+        }
+        public bool RemoveMemberFromLocalGroup(string memberName, string groupName, string serverName)
+        {
+            bool success;
+            //_logger.LogDebug($"Removing member: '{memberName}' from group: '{groupName}' on gateway: '{serverName}'.");
+            try
+            {
+                using (var pc = new PrincipalContext(ContextType.Machine, serverName))
+                {
+                    var gp = GroupPrincipal.FindByIdentity(pc, groupName);
+                    if (gp == null)
+                    {
+                        //_logger.LogDebug($"There is no group: '{groupName}' on gateway: '{serverName}'.");
+                        return false;
+                    }
+                    var groupEntry = (DirectoryEntry)gp.GetUnderlyingObject();
+
+                    if (ExistsInGroup(gp, memberName))
+                        groupEntry.Invoke("Remove", $"WinNT://CERN/{memberName},user");
+                    else
+                        //_logger.LogDebug($"'{memberName}' is not a member of the group '{groupName}' on gateway '{serverName}'.");
+                        Console.WriteLine("already");
+                }
+
+                success = true;
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogError(ex, $"Error while removing member '{memberName}' from group '{groupName}' on gateway: '{serverName}'.");
+                success = false;
+            }
+
+            return success;
+        }
+
+        public bool AddMemberToLocalGroup(string memberName, string groupName, string serverName)
+        {
+            bool success;
+            //_logger.LogDebug($"Adding new member '{memberName}' to the group '{groupName}' on gateway '{serverName}'.");
+            try
+            {
+                using (var pc = new PrincipalContext(ContextType.Machine, serverName))
+                {
+                    var gp = GroupPrincipal.FindByIdentity(pc, groupName);
+                    if (gp == null)
+                    {
+                        //_logger.LogDebug($"There is no group: '{groupName}' on gateway: '{serverName}'.");
+                        return false;
+                    }
+                    var groupEntry = (DirectoryEntry)gp.GetUnderlyingObject();
+
+                    if (!ExistsInGroup(gp, memberName))
+                        groupEntry.Invoke("Add", $"WinNT://CERN/{memberName},user");
+                    else
+                        //_logger.LogDebug($"'{memberName}' is already in the group '{groupName}' on gateway '{serverName}'.");
+                        Console.WriteLine("already");
+                }
+                success = true;
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogError(ex, $"Error while adding member '{memberName}' to group '{groupName}' on gateway '{serverName}'.");
+                success = false;
+            }
+
+            return success;
+        }
+        private bool ExistsInGroup(GroupPrincipal gp, string name)
+        {
+            var allNames = gp.Members.Select(mem => mem.SamAccountName.ToLower());
+            return allNames.Contains(name.ToLower());
+        }
+        public bool ShouldBeDeleted(string value)
+        {
+            return value.StartsWith("-");
+        }
+
+        public bool ShouldBeAdded(string value)
+        {
+            return value.StartsWith("+");
+        }
+        public bool AddEmptyGroup(string groupName, string server)
+        {
+            var success = true;
+            //_logger.LogDebug($"Adding new group: '{groupName}' on gateway: '{server}'.");
+            try
+            {
+                var ad = new DirectoryEntry($"WinNT://{server},computer");
+                DirectoryEntry newGroup = ad.Children.Add(groupName, "group");
+                newGroup.CommitChanges();
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogError(ex, $"Error adding new group: '{groupName}' on gateway: '{server}'.");
+                success = false;
+            }
+
+            return success;
         }
         private void DeleteGroups(string serverName, List<LocalGroup> groupsToDelete)
         {
             Logger.Info($"Deleting {groupsToDelete.Count} groups on gateway '{serverName}'.");
-            _reporter.Info(serverName, $"Deleting {groupsToDelete.Count} groups.");
+            //_reporter.Info(serverName, $"Deleting {groupsToDelete.Count} groups.");
             groupsToDelete.ForEach(lg => DeleteGroup(serverName, lg.Name)); // delete each group with '-' in the name
-            _reporter.Info(serverName, "Finished deleting groups.");
+            //_reporter.Info(serverName, "Finished deleting groups.");
+        }
+        private void DeleteGroup(string server, string localGroup)
+        {
+            string groupName = FormatModifiedValue(localGroup);
+            //_reporter.Info(server, $"Removing group '{groupName}'.");
+            DeleteGroup2(groupName, server);
+            //if (_groupManager.DeleteGroup2(groupName, server))
+            //    _reporter.IncrementDeletedGroups(server);
+            //else
+            //    _reporter.Warn(server, $"Failed removing group '{groupName}' from the gateway.");
+        }
+        public bool DeleteGroup2(string groupName, string server)
+        {
+            var success = true;
+            //Logger.LogDebug($"Removing group '{groupName}' from gateway '{server}'.");
+            try
+            {
+                var machineContext = new PrincipalContext(ContextType.Machine, server);
+                var groupPr = GroupPrincipal.FindByIdentity(machineContext, groupName);
+                groupPr?.Delete();
+            }
+            catch (Exception ex)
+            {
+                success = false;
+                //_logger.LogError(ex, $"Error while deleting group: '{groupName}' from gateway: '{server}'.");
+            }
+
+            return success;
+        }
+        private string FormatModifiedValue(string value)
+        {
+            if (value.StartsWith("-") || value.StartsWith("+"))
+                return value.Substring(1);
+            return value;
         }
         public bool DownloadGatewayConfig(string serverName)
         {
@@ -329,37 +690,25 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             var username = "svcgtw"; // replace with your username
             var password = "7KJuswxQnLXwWM3znp"; // replace with your password
+            var securepassword = new SecureString();
+            foreach (char c in password)
+                securepassword.AppendChar(c);
+            const string AdSearchGroupPath = "WinNT://{0}/{1},group";
+            const string NamespacePath = @"\root\CIMV2\TerminalServices";
+            string _oldGatewayServerHost = @"\\cerngt01.cern.ch";
             try
             {
                 const string osQuery = "SELECT * FROM Win32_TSGatewayResourceAuthorizationPolicy";
-                const string NamespacePath = "root\\cimv2";
+                CimCredential Credentials = new CimCredential(PasswordAuthenticationMechanism.Default, "cern.ch", username, securepassword);
 
-                // Create the ConnectionOptions object with the credentials
-                ConnectionOptions options = new ConnectionOptions
-                {
-                    Username = username,
-                    Password = password,
-                    Impersonation = ImpersonationLevel.Impersonate,
-                    Authentication = AuthenticationLevel.PacketPrivacy
-                };
-
-                // Create the ManagementScope with the ConnectionOptions
-                ManagementScope scope = new ManagementScope($"\\\\{serverName}\\{NamespacePath}", options);
-                scope.Connect();
-
-                // Create the ObjectQuery with the query string
-                ObjectQuery query = new ObjectQuery(osQuery);
-
-                // Create the ManagementObjectSearcher with the ManagementScope and ObjectQuery
-                ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, query);
-
-                // Execute the query
-                ManagementObjectCollection queryResults = searcher.Get();
-
+                WSManSessionOptions SessionOptions = new WSManSessionOptions();
+                SessionOptions.AddDestinationCredentials(Credentials);
+                CimSession mySession = CimSession.Create(serverName, SessionOptions);
+                IEnumerable<CimInstance> queryInstance = mySession.QueryInstances(_oldGatewayServerHost + NamespacePath, "WQL", osQuery);
                 var rapNames = new List<string>();
                 Console.WriteLine($"Querying '{serverName}'.");
-                foreach (ManagementObject result in queryResults)
-                    rapNames.Add(result["Name"].ToString());
+                foreach (CimInstance x in queryInstance)
+                    rapNames.Add(x.CimInstanceProperties["Name"].Value.ToString());
 
                 return rapNames;
             }
@@ -370,7 +719,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
             return new List<string>();
         }
-
         //private List<string> QueryGatewayRapNamesAsync(string serverName)
         //{
         //    try
@@ -379,43 +727,43 @@ namespace RemoteDesktopCleaner.BackgroundServices
         //        //var userName = "svcgtw"; // Replace with your username
         //        //var password = "7KJuswxQnLXwWM3znp"; // Replace with your password
 
-        //        //var securePassword = new SecureString();
-        //        //foreach (char c in password)
-        //        //    securePassword.AppendChar(c);
+                //        //var securePassword = new SecureString();
+                //        //foreach (char c in password)
+                //        //    securePassword.AppendChar(c);
 
-        //        //WSManConnectionInfo connectionInfo = new WSManConnectionInfo
-        //        //{
-        //        //    ComputerName = serverName,
-        //        //    Credential = new PSCredential(userName, securePassword)
-        //        //};
+                //        //WSManConnectionInfo connectionInfo = new WSManConnectionInfo
+                //        //{
+                //        //    ComputerName = serverName,
+                //        //    Credential = new PSCredential(userName, securePassword)
+                //        //};
 
-        //        //var runspace = RunspaceFactory.CreateRunspace(connectionInfo);
-        //        //runspace.Open();
+                //        //var runspace = RunspaceFactory.CreateRunspace(connectionInfo);
+                //        //runspace.Open();
 
-        //        //using (PowerShell ps = PowerShell.Create())
-        //        //{
-        //        //    ps.Runspace = runspace;
-        //        //    ps.AddScript($"Get-CimInstance -Namespace 'root/CIMV2' -Query '{osQuery}'");
-        //        //    var results = ps.Invoke();
+                //        //using (PowerShell ps = PowerShell.Create())
+                //        //{
+                //        //    ps.Runspace = runspace;
+                //        //    ps.AddScript($"Get-CimInstance -Namespace 'root/CIMV2' -Query '{osQuery}'");
+                //        //    var results = ps.Invoke();
 
-        //        //    var rapNames = new List<string>();
-        //        //    Console.WriteLine($"Querying '{serverName}'.");
-        //        //    foreach (var result in results)
-        //        //    {
-        //        //        rapNames.Add(result.Properties["Name"].Value.ToString());
-        //        //    }
+                //        //    var rapNames = new List<string>();
+                //        //    Console.WriteLine($"Querying '{serverName}'.");
+                //        //    foreach (var result in results)
+                //        //    {
+                //        //        rapNames.Add(result.Properties["Name"].Value.ToString());
+                //        //    }
 
-        //            return rapNames;
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Console.WriteLine(ex.Message);
-        //        //_logger.LogError(ex, "Error while getting rap names from gateway: '{serverName}'. Ex: {ex}");
-        //    }
+                //            return rapNames;
+                //        }
+                //    }
+                //    catch (Exception ex)
+                //    {
+                //        Console.WriteLine(ex.Message);
+                //        //_logger.LogError(ex, "Error while getting rap names from gateway: '{serverName}'. Ex: {ex}");
+                //    }
 
-        //    return new List<string>();
-        //}
+                //    return new List<string>();
+                //}
 
         public class GatewayConfig
         {
@@ -605,6 +953,221 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 Logger.Warn(ex, $"Failed saving gateway: '{diff.ServerName}' discrepancy config to file.");
             }
+        }
+        private List<string> GetAllGatewayGroupsAfterSynchronization(GatewayConfig discrepancy, List<string> addedGroups)
+        {
+            var alreadyExistingGroups = discrepancy.LocalGroups
+                                                    .Where(lg => lg.Name.StartsWith("LG-"))
+                                                    .Select(lg => lg.Name).ToList();
+            return alreadyExistingGroups.Concat(addedGroups).ToList();
+        }
+        public void SynchronizeRaps(string serverName, List<string> allGatewayGroups, List<string> gatewayRaps)
+        {
+            var modelRapNames = allGatewayGroups.Select(LgNameToRapName).ToList();
+            DeleteObsoleteRaps(serverName, modelRapNames, gatewayRaps);
+            AddMissingRaps(serverName, modelRapNames, gatewayRaps);
+        }
+        private static string LgNameToRapName(string lgName)
+        {
+            return lgName.Replace("LG-", "RAP_");
+        }
+        private void DeleteObsoleteRaps(string serverName, List<string> modelRapNames, List<string> gatewayRaps)
+        {
+            var obsoleteRapNames = gatewayRaps.Except(modelRapNames).ToList();
+            //_reporter.SetShouldDeleteRaps(serverName, obsoleteRapNames.Count);
+            //_reporter.Info(serverName, $"Deleting {obsoleteRapNames.Count} RAPs from the gateway.");
+            //_logger.LogInformation($"Deleting {obsoleteRapNames.Count} RAPs from the gateway '{serverName}'.");
+            if (obsoleteRapNames.Count > 0)
+                TryDeletingRaps(serverName, obsoleteRapNames);
+            //_reporter.Info(serverName, "Finished deleting RAPs.");
+            //_logger.LogInformation($"Finished deleting RAPs from the gateway '{serverName}'.");
+        }
+
+        private void AddMissingRaps(string serverName, List<string> modelRapNames, List<string> gatewayRapNames)
+        {
+            var missingRapNames = modelRapNames.Except(gatewayRapNames).ToList();
+            //_reporter.SetShouldAddRaps(serverName, missingRapNames.Count);
+            //_reporter.Info(serverName, $"Adding {missingRapNames.Count} RAPs to the gateway.");
+            //_logger.LogInformation($"Adding {missingRapNames.Count} RAPs to the gateway '{serverName}'.");
+            AddMissingRaps(serverName, missingRapNames);
+            //_reporter.Info(serverName, "Finished adding RAPs.");
+            //_logger.LogInformation($"Finished adding {missingRapNames.Count} RAPs to the gateway '{serverName}'.");
+        }
+        private void TryDeletingRaps(string serverName, List<string> obsoleteRapNames)
+        {
+            bool finished = false;
+            int counter = 0;
+            var toDelete = new List<string>(obsoleteRapNames);
+            while (!(counter == 3 || finished))
+            {
+                var response = DeleteRapsFromGateway(serverName, toDelete);
+                Console.WriteLine($"Deleting raps, try #{counter + 1}"); //TODO delete
+                //_logger.LogDebug($"Deleting raps, try #{counter + 1}");
+                foreach (var res in response)
+                {
+                    if (res.Deleted)
+                    {
+                        //_reporter.IncrementDeletedRaps(serverName);
+                        Console.WriteLine($"Deleted '{res.RapName}'.");
+                        //_logger.LogDebug($"Deleted '{res.RapName}'.");
+                        if (toDelete.Count == 0) finished = true;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Failed deleting '{res.RapName}'."); //TODO delete
+                        //_logger.LogDebug($"Failed deleting '{res.RapName}'.");
+                    }
+                }
+                toDelete = toDelete.Except(response.Where(r => r.Deleted).Select(r => r.RapName)).ToList();
+                counter++;
+            }
+        }
+        public bool AddMissingRaps(string serverName, List<string> missingRapNames)
+        {
+            var sHost = $@"\\{serverName}";
+            try
+            {
+                var oConn = new ConnectionOptions();
+                oConn.Impersonation = ImpersonationLevel.Impersonate;
+                oConn.Authentication = AuthenticationLevel.PacketPrivacy;
+
+                var oMScope = new ManagementScope(sHost + NamespacePath, oConn);
+                oMScope.Options.Authentication = AuthenticationLevel.PacketPrivacy;
+                oMScope.Options.Impersonation = ImpersonationLevel.Impersonate;
+
+                var oMPath = new ManagementPath();
+                oMPath.ClassName = "Win32_TSGatewayResourceAuthorizationPolicy";
+                oMPath.NamespacePath = NamespacePath;
+
+                oMScope.Connect();
+
+                ManagementClass processClass = new ManagementClass(oMScope, oMPath, null);
+
+                ManagementBaseObject inParameters = processClass.GetMethodParameters("Create");
+                var mnvc = new ManagementNamedValueCollection();
+                var imo = new InvokeMethodOptions();
+                imo.Context = mnvc;
+                processClass.Get();
+                var i = 0;
+                inParameters["Description"] = "";
+                inParameters["Enabled"] = true;
+                inParameters["ResourceGroupType"] = "CG";
+                inParameters["ProtocolNames"] = "RDP";
+                inParameters["PortNumbers"] = "3389";
+                foreach (var rapName in missingRapNames)
+                {
+                    //_reporter.Info(serverName, $"Adding '{rapName}'.");
+                    //_logger.LogInformation($"Adding new RAP '{rapName}' to the gateway '{serverName}'.");
+                    var groupName = ConvertToLgName(rapName);
+                    inParameters["Name"] = "" + rapName;
+                    inParameters["ResourceGroupName"] = groupName;
+                    inParameters["UserGroupNames"] = groupName;
+
+                    ManagementBaseObject outParameters = processClass.InvokeMethod("Create", inParameters, imo);
+
+                    if ((uint)outParameters["ReturnValue"] == 0)
+                    {
+                        Console.WriteLine($"{rapName} created. {++i}/{missingRapNames.Count}"); //TODO delete
+                        //_logger.LogInformation($"RAP '{rapName}' added to the gateway '{serverName}'.");
+                        //_reporter.IncrementAddedRaps(serverName);
+                    }
+                    //else
+                    //{
+                    //    _reporter.Warn(serverName, $"Failed adding new RAP '{rapName}'. Error code: '{(uint)outParameters["ReturnValue"]}'.");
+                    //    _logger.LogWarning($"Error creating RAP: '{rapName}'. Reason: {(uint)outParameters["ReturnValue"]}.");
+                    //}
+                }
+                return true;
+            }
+            catch (System.Exception ex)
+            {
+                //_logger.LogError(ex, $"Error when adding new RAPs to the gateway '{serverName}'.");
+                //_reporter.Error(serverName, $"Exception when adding missing RAPs to the gateway. Details: {ex.Message}");
+                return false;
+            }
+        }
+        private string ConvertToLgName(string rapName)
+        {
+            return rapName.Replace("RAP_", "LG-");
+        }
+        public List<RapsDeletionResponse> DeleteRapsFromGateway(string serverName, List<string> rapNamesToDelete)
+        {
+            var result = new List<RapsDeletionResponse>();
+            try
+            {
+                string where = CreateWhereClause(rapNamesToDelete);
+                string osQuery =
+                    "SELECT * FROM Win32_TSGatewayResourceAuthorizationPolicy " + where;
+                CimSession mySession = CimSession.Create(serverName);
+                IEnumerable<CimInstance> queryInstance = mySession.QueryInstances(NamespacePath, "WQL", osQuery);
+                //_logger.LogDebug($"Querying '{serverName}' for {rapNamesToDelete.Count} RAPs to delete.");
+                foreach (CimInstance rapInstance in queryInstance)
+                {
+                    var rapName = rapInstance.CimInstanceProperties["Name"].Value.ToString();
+                    if (!rapNamesToDelete.Contains(rapName)) continue;
+
+                    var rapDeletion = DeleteRap(mySession, rapInstance, rapName);
+                    result.Add(rapDeletion);
+                }
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogError($"Error while getting rap names from gateway: '{serverName}'.Ex: {ex}");
+            }
+
+            return result;
+        }
+        private string CreateWhereClause(IEnumerable<string> names)
+        {
+            var enumerable = names.ToList();
+            if (enumerable.Count == 0)
+                return "";
+            var sb = new StringBuilder();
+            sb.Append("WHERE");
+            for (var i = 0; i < enumerable.Count; i++)
+            {
+                var name = enumerable[i];
+                sb.Append(" (Name=\"" + name + "\")");
+                if (i != enumerable.Count - 1)
+                    sb.Append(" or");
+            }
+            return sb.ToString();
+        }
+        private RapsDeletionResponse DeleteRap(CimSession mySession, CimInstance rapInstance, string rapName)
+        {
+            var rapDeletion = new RapsDeletionResponse(rapName);
+            try
+            {
+                var result = mySession.InvokeMethod(rapInstance, "Delete", null);
+                if (int.Parse(result.ReturnValue.Value.ToString()) == 0)
+                {
+                    rapDeletion.Deleted = true;
+                    //_logger.LogDebug($"Deleted RAP '{rapName}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogWarning(ex, $"Error deleting rap '{rapName}'.");
+            }
+
+            return rapDeletion;
+        }
+
+    }
+
+    public class RapsDeletionResponse
+    {
+        public string RapName { get; set; }
+        public bool Deleted { get; set; }
+
+        public override string ToString()
+        {
+            return JsonSerializer.Serialize(this);
+        }
+
+        public RapsDeletionResponse(string name)
+        {
+            RapName = name;
         }
     }
 }
