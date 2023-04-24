@@ -56,6 +56,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
         public LocalGroup(string name)
         {
             Name = name;
+            Flag = LocalGroupFlag.Update;
         }
         public LocalGroup(string name, LocalGroupFlag flag)
         {

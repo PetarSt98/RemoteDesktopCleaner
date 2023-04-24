@@ -95,7 +95,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 //_reporter.Start(serverName); // pravi se loger
                 Logger.Debug($"Starting the synchronization of '{serverName}' gateway.");
-                var taskGtRapNames = GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
+                //var taskGtRapNames = GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
                 if (DownloadGatewayConfig(serverName))
                 { // ako uspesno loadujes local group names i napravis LG objekte // ubaci da baci gresku ako je prazno
                     var cfgDiscrepancy = GetConfigDiscrepancy(serverName); // ovo je diff izmedju MODEL-a i CERNGT01, tj diff kojim treba CERNGT01 da se updatuje
@@ -106,7 +106,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     Logger.Info($"Awaiting getting gateway RAP names for '{serverName}'.");
                     //    var gatewayRapNames = await taskGtRapNames; // update server CERNGT01, get all raps from CERNGT01
                     //    Logger.Info($"Finished getting gateway RAP names for '{serverName}'.");
-                    SynchronizeRaps(serverName, allGatewayGroups, taskGtRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
+                    //SynchronizeRaps(serverName, allGatewayGroups, taskGtRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
                 }
                 //_reporter.Finish(serverName); // create log file and send it to email
             }
@@ -526,9 +526,10 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 {
                     Console.Write(
                         $"\rDownloading {serverName} config - {i + 1}/{localGroupNames.Count} - {100 * (i + 1) / localGroupNames.Count}%"); //TODO delete
-                    var members = GetGroupMembers(lg, serverName);
+                    var members = GetGroupMembers(lg, serverName + ".cern.ch");
                     localGroups.Add(new LocalGroup(lg, members));
                     i++;
+                    if (i > 6) break;
                 }
 
                 File.WriteAllText(path, JsonSerializer.Serialize(localGroups));
@@ -901,7 +902,8 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 }
                 else
                 {
-                    lgDiff = new LocalGroup($"-{gtLocalGroup.Name}");
+                    //lgDiff = new LocalGroup($"-{gtLocalGroup.Name}");
+                    lgDiff = new LocalGroup(gtLocalGroup.Name, LocalGroupFlag.Delete);
                     lgDiff.Computers.AddRange(gtLocalGroup.Computers);
                     lgDiff.Members.AddRange(gtLocalGroup.Members);
                 }
