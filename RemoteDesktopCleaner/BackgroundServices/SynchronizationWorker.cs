@@ -117,21 +117,28 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             Console.WriteLine($"Finished synchronization for gateway '{serverName}'.");
         }
-        private List<LocalGroup> FilterChangedLocalGroups(List<LocalGroup> allGroups)
+        private LocalGroupsChanges FilterChangedLocalGroups(List<LocalGroup> allGroups)
         {
-            var groupsToDelete = allGroups.Where(lg => lg.Name.StartsWith("-")).ToList(); // LG to be deleted
-            var groupsToAdd = allGroups.Where(lg => lg.Name.StartsWith("+")).ToList(); // LG to be added
-            var changedContent = allGroups.Where(lg => lg.Name.StartsWith("LG-") && lg.Content.Any(content =>
-                content.StartsWith("S-1-5") || content.StartsWith("+") || content.StartsWith("-"))).ToList(); // LG whose computers or members will be added/deleted
-            var groupsToSync = groupsToDelete.Concat(groupsToAdd).Concat(changedContent).ToList(); // concatenate it, suvisno
+            //var groupsToDelete2 = allGroups.Where(lg => lg.Name.StartsWith("-")).ToList(); // LG to be deleted
+            var groupsToDelete = allGroups.Where(lg => lg.Flag == LocalGroupFlag.Delete).ToList(); // LG to be deleted
+            //var groupsToAdd2 = allGroups.Where(lg => lg.Name.StartsWith("+")).ToList(); // LG to be added
+            var groupsToAdd = allGroups.Where(lg => lg.Flag == LocalGroupFlag.Add).ToList();
+            //var changedContent2 = allGroups.Where(lg => lg.Name.StartsWith("LG-") && lg.Content.Any(content =>
+            //    content.StartsWith("S-1-5") || content.StartsWith("+") || content.StartsWith("-"))).ToList(); // LG whose computers or members will be added/deleted
+            var changedContent = allGroups.Where(lg => lg.Flag == LocalGroupFlag.CheckForUpdate && lg.MembersObj.Flags.Any(content => content != LocalGroupFlag.None)).ToList(); // LG whose computers or members will be added/deleted
+            var groupsToSync = new LocalGroupsChanges();
+            groupsToSync.LocalGroupsToDelete = groupsToDelete;
+            groupsToSync.LocalGroupsToAdd = groupsToAdd;
+            groupsToSync.LocalGroupsToUpdate = changedContent;
+            //var groupsToSync = groupsToDelete.Concat(groupsToAdd).Concat(changedContent).ToList(); // concatenate it, suvisno
             return groupsToSync;
         }
-        public List<string> SyncLocalGroups(List<LocalGroup> changedLocalGroups, string serverName)
+        public List<string> SyncLocalGroups(LocalGroupsChanges changedLocalGroups, string serverName)
         {
             //_reporter.Info(serverName, $"There are {changedLocalGroups.Count} groups to synchronize.");
-            var groupsToDelete = changedLocalGroups.Where(lg => lg.Name.StartsWith("-")).ToList(); // ovo bukv imamo u filteringu, suvisno
-            var groupsToAdd = changedLocalGroups.Where(lg => lg.Name.StartsWith("+")).ToList();
-            var modifiedGroups = changedLocalGroups.Where(lg => lg.Name.StartsWith("LG-")).ToList();
+            var groupsToDelete = changedLocalGroups.LocalGroupsToDelete; // ovo bukv imamo u filteringu, suvisno
+            var groupsToAdd = changedLocalGroups.LocalGroupsToAdd;
+            var modifiedGroups = changedLocalGroups.LocalGroupsToUpdate;
 
             DeleteGroups(serverName, groupsToDelete); // delete groups with '-' in the name
             var addedGroups = AddNewGroups(serverName, groupsToAdd); // add the groups with '+' in the name
@@ -223,16 +230,16 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 var formattedGroupName = FormatModifiedValue(lg.Name);
                 //_reporter.Info(serverName, $"Adding group '{formattedGroupName}'.");
                 if (AddNewGroupWithContent(serverName, lg))
-                    addedGroups.Add(formattedGroupName);
+                    addedGroups.Add(lg.Name);
             }
             //_reporter.Info(serverName, $"Finished adding {addedGroups.Count} new groups.");
             return addedGroups;
         }
         private bool AddNewGroupWithContent(string server, LocalGroup lg)
         {
-            string groupName = FormatModifiedValue(lg.Name);
+            //string groupName = FormatModifiedValue(lg.Name);
             var success = true;
-            if (AddEmptyGroup(groupName, server))
+            if (AddEmptyGroup(lg.Name, server))
             {
                 if (!SyncMember(lg, server))
                     success = false;
@@ -248,17 +255,19 @@ namespace RemoteDesktopCleaner.BackgroundServices
             //if (success) _reporter.IncrementAddedGroups(server);
             return success;
         }
+
         private bool SyncComputers(LocalGroup lg, string server)
         {
-            string groupName = FormatModifiedValue(lg.Name);
+            //string groupName = FormatModifiedValue(lg.Name);
             var success = true;
-            foreach (var computer in lg.Computers)
+            var computersData = lg.ComputersObj.Names.Zip(lg.ComputersObj.Flags, (i, j) => new { Name = i, Flag = j });
+            foreach (var computer in computersData)
             {
-                string computerName = FormatModifiedValue(computer);
-                if (ShouldBeDeleted(computer))
-                    success = success && DeleteComputer(server, groupName, computerName);
-                else if (ShouldBeAdded(computer))
-                    success = success && AddComputer(server, groupName, computerName);
+                //string computerName = FormatModifiedValue(computer);
+                if (computer.Flag == LocalGroupFlag.Delete)
+                    success = success && DeleteComputer(server, lg.Name, computer.Name);
+                else if (computer.Flag == LocalGroupFlag.Add)
+                    success = success && AddComputer(server, lg.Name, computer.Name);
             }
             //if (!success) _reporter.Warn(server, $"Failed synchronizing computers for group: '{groupName}'.");
             return success;
@@ -342,14 +351,21 @@ namespace RemoteDesktopCleaner.BackgroundServices
         private bool SyncMember(LocalGroup lg, string server)
         {
             var success = true;
-            string groupName = FormatModifiedValue(lg.Name);
-            foreach (var member in lg.Members.Where(m => !m.StartsWith(Constants.OrphanedSid)))
+            //string groupName = FormatModifiedValue(lg.Name);
+
+            var membersData = lg.MembersObj.Names.Zip(lg.MembersObj.Flags, (i, j) => new { Name = i, Flag = j });
+
+            foreach (var member in membersData.Where(m => !m.Name.StartsWith(Constants.OrphanedSid)))
             {
-                string memberName = FormatModifiedValue(member);
-                if (ShouldBeDeleted(member))
-                    success = DeleteMember(server, groupName, memberName);
-                else if (ShouldBeAdded(member))
-                    success = AddMember(server, groupName, memberName);
+                //string memberName = FormatModifiedValue(member);
+                //if (ShouldBeDeleted(member))
+                //    success = DeleteMember(server, lg.Name, memberName);
+                //else if (ShouldBeAdded(member))
+                //    success = AddMember(server, lg.Name, memberName);
+                if (member.Flag == LocalGroupFlag.Delete)
+                    success = DeleteMember(server, lg.Name, member.Name);
+                else if (member.Flag == LocalGroupFlag.Add)
+                    success = AddMember(server, lg.Name, member.Name);
             }
             //if (!success) _reporter.Warn(server, $"Failed synchronizing members for group '{groupName}'.");
             return success;
@@ -476,7 +492,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             string groupName = FormatModifiedValue(localGroup);
             //_reporter.Info(server, $"Removing group '{groupName}'.");
-            DeleteGroup2(groupName, server);
+            DeleteGroup2(localGroup, server);
             //if (_groupManager.DeleteGroup2(groupName, server))
             //    _reporter.IncrementDeletedGroups(server);
             //else
@@ -895,17 +911,21 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 LocalGroup lgDiff;
                 if (IsInConfig(gtLocalGroup.Name, modelCfg))
                 {
-                    lgDiff = new LocalGroup(gtLocalGroup.Name);
+                    lgDiff = new LocalGroup(gtLocalGroup.Name, LocalGroupFlag.CheckForUpdate);
                     var modelLocalGroup = modelCfg.LocalGroups.First(lg => lg.Name == gtLocalGroup.Name);
-                    lgDiff.Computers.AddRange(GetListDiscrepancy(modelLocalGroup.Computers, gtLocalGroup.Computers));
-                    lgDiff.Members.AddRange(GetListDiscrepancy(modelLocalGroup.Members, gtLocalGroup.Members));
+                    //lgDiff.Computers.AddRange(GetListDiscrepancy(modelLocalGroup.Computers, gtLocalGroup.Computers));
+                    lgDiff.ComputersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Computers, gtLocalGroup.Computers));
+                    //lgDiff.Members.AddRange(GetListDiscrepancy(modelLocalGroup.Members, gtLocalGroup.Members));
+                    lgDiff.MembersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Members, gtLocalGroup.Members));
                 }
                 else
                 {
                     //lgDiff = new LocalGroup($"-{gtLocalGroup.Name}");
                     lgDiff = new LocalGroup(gtLocalGroup.Name, LocalGroupFlag.Delete);
                     lgDiff.Computers.AddRange(gtLocalGroup.Computers);
+                    lgDiff.ComputersObj.AddRange(gtLocalGroup.Computers, Enumerable.Repeat(LocalGroupFlag.Delete, gtLocalGroup.Computers.Count).ToList());
                     lgDiff.Members.AddRange(gtLocalGroup.Members);
+                    lgDiff.MembersObj.AddRange(gtLocalGroup.Members, Enumerable.Repeat(LocalGroupFlag.Delete, gtLocalGroup.Members.Count).ToList());
                 }
                 results.Add(lgDiff);
             }
@@ -918,9 +938,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
             foreach (var modelLocalGroup in modelGroups)
             {
                 if (IsInConfig(modelLocalGroup.Name, gatewayCfg)) continue;
-                var lg = new LocalGroup($"+{modelLocalGroup.Name}");
-                lg.Computers.AddRange(GetListDiscrepancy(modelLocalGroup.Computers, new List<string>()));
-                lg.Members.AddRange(GetListDiscrepancy(modelLocalGroup.Members, new List<string>()));
+                //var lg = new LocalGroup($"+{modelLocalGroup.Name}");
+                var lg = new LocalGroup(modelLocalGroup.Name, LocalGroupFlag.Add);
+                lg.ComputersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Computers, new List<string>()));
+                lg.MembersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Members, new List<string>()));
+
+                //lg.Computers.AddRange(GetListDiscrepancy(modelLocalGroup.Computers, new List<string>()));
+                //lg.Members.AddRange(GetListDiscrepancy(modelLocalGroup.Members, new List<string>()));
                 result.Add(lg);
             }
 
@@ -935,6 +959,22 @@ namespace RemoteDesktopCleaner.BackgroundServices
             result.AddRange(from el in modelList where !IsInListIgnoreCase(el, otherList) select $"+{el.ToLower()}");
             result.AddRange(otherList.Where(el => el.StartsWith(Constants.OrphanedSid)));
             return result;
+        }
+        private LocalGroupContent GetListDiscrepancyTest(ICollection<string> modelList, ICollection<string> otherList)
+        {
+            var flags = otherList
+                .Where(el => !el.StartsWith(Constants.OrphanedSid))
+                .Select(el => el.ToLower())
+                .Select(el => IsInListIgnoreCase(el, modelList) ? LocalGroupFlag.None : LocalGroupFlag.Delete).ToList();
+            var names = otherList
+                .Where(el => !el.StartsWith(Constants.OrphanedSid))
+                .Select(el => el.ToLower()).ToList();
+            flags.AddRange(from el in modelList where !IsInListIgnoreCase(el, otherList) select LocalGroupFlag.Add);
+            names.AddRange(from el in modelList where !IsInListIgnoreCase(el, otherList) select el.ToLower());
+            flags.AddRange(otherList.Where(el => el.StartsWith(Constants.OrphanedSid)).Select(el => LocalGroupFlag.OrphanedSid));
+
+            names.AddRange(otherList.Where(el => el.StartsWith(Constants.OrphanedSid)));
+            return new LocalGroupContent(names, flags);
         }
         private static bool IsInConfig(string groupName, GatewayConfig config)
         {
