@@ -157,12 +157,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             //_reporter.Info(server, $"Synchronizing {lg.Name}.");
             var success = true;
-            if (CleanFromOrphanedSids(lg.Name, server))
+            var localGroup = GetLocalGroup(server, lg.Name);
+            if (CleanFromOrphanedSids(localGroup, lg.Name, server)) // ovo popraviti jer nesto nije ok
             {
-                if (!SyncMember(null, lg, server))
+                if (!SyncMember(localGroup, lg, server))
                     success = false;
 
-                if (!SyncComputers(null, lg, server))
+                if (!SyncComputers(localGroup, lg, server))
                     success = false;
             }
             else
@@ -173,26 +174,29 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             //if (success) _reporter.IncrementSynchronizedGroups(server);
         }
-        public bool CleanFromOrphanedSids(string groupName, string serverName)
+        private DirectoryEntry GetLocalGroup(string server, string groupName)
+        {
+            string username = "svcgtw";
+            string password = "7KJuswxQnLXwWM3znp";
+            var ad = new DirectoryEntry($"WinNT://{server},computer", username, password);
+            try
+            {
+                DirectoryEntry newGroup = ad.Children.Find(groupName, "group");
+                return newGroup;
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public bool CleanFromOrphanedSids(DirectoryEntry localGroup, string groupName, string serverName)
         {
             string username = "svcgtw";
             string password = "7KJuswxQnLXwWM3znp";
             try
             {
                 bool success;
-                //_logger.LogDebug($"Cleaning group: '{groupName}' on gateway '{serverName}' from potential orphaned SIDs.");
-                using (var pc = new PrincipalContext(ContextType.Machine, serverName, null, username, password))
-                {
-                    var groupPrincipal = GroupPrincipal.FindByIdentity(pc, groupName);
-                    if (groupPrincipal == null)
-                    {
-                        //_logger.LogWarning($"There is no group: '{groupName}' on gateway: '{serverName}'.");
-                        return false;
-                    }
-                    var gp = (DirectoryEntry)groupPrincipal.GetUnderlyingObject();
-                    success = RemoveOrphanedSids(gp);
-                }
-
+                success = RemoveOrphanedSids(localGroup);
                 return success;
             }
             catch (Exception ex)
@@ -556,6 +560,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             string password = "7KJuswxQnLXwWM3znp";
             bool groupExists = false;
             DirectoryEntry newGroup = null;
+
             //Logger.LogDebug($"Removing group '{groupName}' from gateway '{server}'.");
             try
             {
@@ -567,6 +572,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 var ad = new DirectoryEntry($"WinNT://{server},computer", username, password);
                 try
                 {
+                    
                     newGroup = ad.Children.Find(groupName, "group");
                     groupExists = true;
                 }
@@ -581,10 +587,10 @@ namespace RemoteDesktopCleaner.BackgroundServices
                         throw;
                     }
                 }
-                if (groupExists)
+                if (groupExists && newGroup is not null)
                 {
-                    newGroup = ad.Children.Remove(groupName);
-                    newGroup.CommitChanges();
+                    ad.Children.Remove(newGroup);
+                    //newGroup.CommitChanges();
                     success = true;
                 }
             }
