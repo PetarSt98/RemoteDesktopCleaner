@@ -159,10 +159,10 @@ namespace RemoteDesktopCleaner.BackgroundServices
             var success = true;
             if (CleanFromOrphanedSids(lg.Name, server))
             {
-                if (!SyncMember(lg, server))
+                if (!SyncMember(null, lg, server))
                     success = false;
 
-                if (!SyncComputers(lg, server))
+                if (!SyncComputers(null, lg, server))
                     success = false;
             }
             else
@@ -175,11 +175,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
         }
         public bool CleanFromOrphanedSids(string groupName, string serverName)
         {
+            string username = "svcgtw";
+            string password = "7KJuswxQnLXwWM3znp";
             try
             {
                 bool success;
                 //_logger.LogDebug($"Cleaning group: '{groupName}' on gateway '{serverName}' from potential orphaned SIDs.");
-                using (var pc = new PrincipalContext(ContextType.Machine, serverName))
+                using (var pc = new PrincipalContext(ContextType.Machine, serverName, null, username, password))
                 {
                     var groupPrincipal = GroupPrincipal.FindByIdentity(pc, groupName);
                     if (groupPrincipal == null)
@@ -225,12 +227,15 @@ namespace RemoteDesktopCleaner.BackgroundServices
             //_logger.LogInformation($"Adding {groupsToAdd.Count} new groups to the gateway '{serverName}'.");
             //_reporter.Info(serverName, $"Adding {groupsToAdd.Count} new groups.");
             var addedGroups = new List<string>();
+            int counter = 0;
             foreach (var lg in groupsToAdd)
             {
                 var formattedGroupName = FormatModifiedValue(lg.Name);
                 //_reporter.Info(serverName, $"Adding group '{formattedGroupName}'.");
                 if (AddNewGroupWithContent(serverName, lg))
                     addedGroups.Add(lg.Name);
+                counter++;
+                if(counter > 3) break;
             }
             //_reporter.Info(serverName, $"Finished adding {addedGroups.Count} new groups.");
             return addedGroups;
@@ -239,11 +244,12 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             //string groupName = FormatModifiedValue(lg.Name);
             var success = true;
-            if (AddEmptyGroup(lg.Name, server))
+            var newGroup = AddEmptyGroup(lg.Name, server);
+            if (newGroup is not null)
             {
-                if (!SyncMember(lg, server))
+                if (!SyncMember(newGroup, lg, server))
                     success = false;
-                if (!SyncComputers(lg, server))
+                if (!SyncComputers(newGroup, lg, server))
                     success = false;
             }
             else
@@ -251,12 +257,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 success = false;
                 //_reporter.Warn(server, $"Failed adding new group: '{groupName}' and its contents.");
             }
-
+            newGroup.CommitChanges();
             //if (success) _reporter.IncrementAddedGroups(server);
             return success;
         }
 
-        private bool SyncComputers(LocalGroup lg, string server)
+
+        private bool SyncComputers(DirectoryEntry newGroup, LocalGroup lg, string server)
         {
             //string groupName = FormatModifiedValue(lg.Name);
             var success = true;
@@ -265,90 +272,83 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 //string computerName = FormatModifiedValue(computer);
                 if (computer.Flag == LocalGroupFlag.Delete)
-                    success = success && DeleteComputer(server, lg.Name, computer.Name);
+                    success = success && DeleteComputer(server, lg.Name, computer.Name, newGroup);
                 else if (computer.Flag == LocalGroupFlag.Add)
-                    success = success && AddComputer(server, lg.Name, computer.Name);
+                    success = success && AddComputer(server, lg.Name, computer.Name, newGroup);
             }
             //if (!success) _reporter.Warn(server, $"Failed synchronizing computers for group: '{groupName}'.");
             return success;
         }
-        private bool DeleteComputer(string server, string groupName, string computerName)
+        private bool DeleteComputer(string server, string groupName, string computerName, DirectoryEntry newGroup)
         {
-            if (RemoveComputerFromLocalGroup(computerName, groupName, server)) return true;
+            if (RemoveComputerFromLocalGroup(computerName, groupName, server, newGroup)) return true;
             //_logger.LogDebug($"Failed removing computer: '{computerName}' from group: '{groupName}' on gateway: '{server}'.");
             return false;
         }
 
-        private bool AddComputer(string server, string groupName, string computerName)
+        private bool AddComputer(string server, string groupName, string computerName, DirectoryEntry newGroup)
         {
-            if (AddComputerToLocalGroup(computerName, groupName, server)) return true;
+            if (AddComputerToLocalGroup(computerName, groupName, server, newGroup)) return true;
             //_logger.LogDebug($"Failed adding new computer: '{computerName}' to group: '{groupName}' on gateway: '{server}'.");
             return false;
         }
-        public bool RemoveComputerFromLocalGroup(string computerName, string groupName, string serverName)
+        public bool RemoveComputerFromLocalGroup(string computerName, string groupName, string serverName, DirectoryEntry groupEntry)
         {
             var success = true;
+            string username = "svcgtw";
+            string password = "7KJuswxQnLXwWM3znp";
             try
             {
-                //_logger.LogDebug($"Removing computer: '{computerName}' from local group: '{groupName}' on gateway '{serverName}'.");
-                using (var pc = new PrincipalContext(ContextType.Machine, serverName))
+                try
                 {
-                    var gp = GroupPrincipal.FindByIdentity(pc, groupName);
-                    if (gp == null)
-                    {
-                        //_logger.LogDebug($"There is no group: '{groupName}' on gateway: '{serverName}'.");
-                        return false;
-                    }
-
-                    var groupEntry = (DirectoryEntry)gp.GetUnderlyingObject();
-                    if (ExistsInGroup(gp, computerName))
-                        groupEntry.Invoke("Remove", $"WinNT://CERN/{computerName},computer");
-                    //else
-                        //_logger.LogDebug($"'{computerName}' is not a member of the group '{groupName}' on gateway '{serverName}'.");
+                    groupEntry.Invoke("Remove", $"WinNT://CERN/{computerName},computer");
+                    groupEntry.CommitChanges();
                 }
+                catch (System.Reflection.TargetInvocationException ex)
+                {
+                    Console.WriteLine(ex.Message);
+                }
+                success = true;
+
             }
             catch (Exception ex)
             {
-                //_logger.LogError(ex, "Error while removing computer '{computerName}' from local group '{groupName}' on gateway '{serverName}'.");
+                //_logger.LogError(ex, $"Error while adding member '{memberName}' to group '{groupName}' on gateway '{serverName}'.");
                 success = false;
             }
 
             return success;
         }
 
-        public bool AddComputerToLocalGroup(string computerName, string groupName, string serverName)
+        public bool AddComputerToLocalGroup(string computerName, string groupName, string serverName, DirectoryEntry groupEntry)
         {
             bool success;
+            string username = "svcgtw";
+            string password = "7KJuswxQnLXwWM3znp";
             //_logger.LogDebug($"Adding new computer '{computerName}' to the group '{groupName}' on gateway '{serverName}'.");
             try
             {
-                using (var pc = new PrincipalContext(ContextType.Machine, serverName))
+                try
                 {
-                    var gp = GroupPrincipal.FindByIdentity(pc, groupName);
-                    if (gp == null)
-                    {
-                        //_logger.LogDebug($"There is no group: '{groupName}' on gateway: '{serverName}'.");
-                        return false;
-                    }
-
-                    var groupEntry = (DirectoryEntry)gp.GetUnderlyingObject();
-                    if (!ExistsInGroup(gp, computerName))
-                        groupEntry.Invoke("Add", $"WinNT://CERN/{computerName},computer");
-                    //else
-                        //_logger.LogDebug($"'{computerName}' is already in the group '{groupName}' on gateway '{serverName}'.");
+                    groupEntry.Invoke("Add", $"WinNT://CERN/{computerName},computer");
+                    groupEntry.CommitChanges();
                 }
-
+                catch (System.Reflection.TargetInvocationException ex)
+                {
+                    Console.WriteLine(ex.Message);
+                }
                 success = true;
+
             }
             catch (Exception ex)
             {
-                //_logger.LogError(ex, $"Error adding new computer '{computerName}' to the group '{groupName}' on gateway '{serverName}'.");
+                //_logger.LogError(ex, $"Error while adding member '{memberName}' to group '{groupName}' on gateway '{serverName}'.");
                 success = false;
             }
 
             return success;
         }
-        private bool SyncMember(LocalGroup lg, string server)
+        private bool SyncMember(DirectoryEntry newGroup, LocalGroup lg, string server)
         {
             var success = true;
             //string groupName = FormatModifiedValue(lg.Name);
@@ -363,63 +363,89 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 //else if (ShouldBeAdded(member))
                 //    success = AddMember(server, lg.Name, memberName);
                 if (member.Flag == LocalGroupFlag.Delete)
-                    success = DeleteMember(server, lg.Name, member.Name);
+                    success = DeleteMember(server, lg.Name, member.Name, newGroup);
                 else if (member.Flag == LocalGroupFlag.Add)
-                    success = AddMember(server, lg.Name, member.Name);
+                    success = AddMember(server, lg.Name, member.Name, newGroup);
             }
             //if (!success) _reporter.Warn(server, $"Failed synchronizing members for group '{groupName}'.");
             return success;
         }
-        private bool DeleteMember(string server, string groupName, string memberName)
+        
+        private bool DeleteMember(string server, string groupName, string memberName, DirectoryEntry newGroup)
         {
-            if (RemoveMemberFromLocalGroup(memberName, groupName, server)) return true;
+            if (RemoveMemberFromLocalGroup(memberName, groupName, server, newGroup)) return true;
             //_logger.LogDebug($"Failed removing member: '{memberName}' from group: '{groupName}' on gateway: '{server}'.");
             return false;
         }
 
-        private bool AddMember(string server, string groupName, string memberName)
+        private bool AddMember(string server, string groupName, string memberName, DirectoryEntry newGroup)
         {
-            if (AddMemberToLocalGroup(memberName, groupName, server)) return true;
+            if (AddMemberToLocalGroup(memberName, groupName, server, newGroup)) return true;
             //_logger.LogDebug($"Failed adding new member: '{memberName}' to group: '{groupName}' on gateway: '{server}'.");
             return false;
         }
-        public bool RemoveMemberFromLocalGroup(string memberName, string groupName, string serverName)
+        public bool RemoveMemberFromLocalGroup(string memberName, string groupName, string serverName, DirectoryEntry groupEntry)
         {
             bool success;
+            string username = "svcgtw";
+            string password = "7KJuswxQnLXwWM3znp";
             //_logger.LogDebug($"Removing member: '{memberName}' from group: '{groupName}' on gateway: '{serverName}'.");
             try
             {
-                using (var pc = new PrincipalContext(ContextType.Machine, serverName))
+                try
                 {
-                    var gp = GroupPrincipal.FindByIdentity(pc, groupName);
-                    if (gp == null)
-                    {
-                        //_logger.LogDebug($"There is no group: '{groupName}' on gateway: '{serverName}'.");
-                        return false;
-                    }
-                    var groupEntry = (DirectoryEntry)gp.GetUnderlyingObject();
-
-                    if (ExistsInGroup(gp, memberName))
-                        groupEntry.Invoke("Remove", $"WinNT://CERN/{memberName},user");
-                    else
-                        //_logger.LogDebug($"'{memberName}' is not a member of the group '{groupName}' on gateway '{serverName}'.");
-                        Console.WriteLine("already");
+                    groupEntry.Invoke("Remove", $"WinNT://CERN/{memberName},user");
+                    groupEntry.CommitChanges();
                 }
-
+                catch (System.Reflection.TargetInvocationException ex)
+                { 
+                    Console.WriteLine(ex.Message);
+                }
                 success = true;
+
             }
             catch (Exception ex)
             {
-                //_logger.LogError(ex, $"Error while removing member '{memberName}' from group '{groupName}' on gateway: '{serverName}'.");
+                //_logger.LogError(ex, $"Error while adding member '{memberName}' to group '{groupName}' on gateway '{serverName}'.");
                 success = false;
             }
 
             return success;
         }
 
+        public bool AddMemberToLocalGroup(string memberName, string groupName, string serverName, DirectoryEntry groupEntry)
+        {
+            bool success;
+            string username = "svcgtw";
+            string password = "7KJuswxQnLXwWM3znp";
+            //_logger.LogDebug($"Adding new member '{memberName}' to the group '{groupName}' on gateway '{serverName}'.");
+            try
+            {
+                try
+                {
+                    groupEntry.Invoke("Add", $"WinNT://CERN/{memberName},user");
+                    groupEntry.CommitChanges();
+                }
+                catch (System.Reflection.TargetInvocationException ex)
+                { 
+                    Console.WriteLine(ex.Message);
+                }
+                success = true;
+
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogError(ex, $"Error while adding member '{memberName}' to group '{groupName}' on gateway '{serverName}'.");
+                success = false;
+            }
+
+            return success;
+        }
         public bool AddMemberToLocalGroup(string memberName, string groupName, string serverName)
         {
             bool success;
+            string username = "svcgtw";
+            string password = "7KJuswxQnLXwWM3znp";
             //_logger.LogDebug($"Adding new member '{memberName}' to the group '{groupName}' on gateway '{serverName}'.");
             try
             {
@@ -440,6 +466,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                         Console.WriteLine("already");
                 }
                 success = true;
+
             }
             catch (Exception ex)
             {
@@ -463,23 +490,47 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             return value.StartsWith("+");
         }
-        public bool AddEmptyGroup(string groupName, string server)
+        public DirectoryEntry AddEmptyGroup(string groupName, string server)
         {
             var success = true;
+            DirectoryEntry newGroup = null;
+            string username = "svcgtw";
+            string password = "7KJuswxQnLXwWM3znp";
+            bool groupExists = false;
+
             //_logger.LogDebug($"Adding new group: '{groupName}' on gateway: '{server}'.");
             try
             {
-                var ad = new DirectoryEntry($"WinNT://{server},computer");
-                DirectoryEntry newGroup = ad.Children.Add(groupName, "group");
-                newGroup.CommitChanges();
+                var ad = new DirectoryEntry($"WinNT://{server},computer", username, password);
+                try
+                {
+                    newGroup = ad.Children.Find(groupName, "group");
+                    groupExists = true;
+                }
+                catch (System.Runtime.InteropServices.COMException ex)
+                {
+                    if (ex.ErrorCode == -2147022675) // Group not found.
+                    {
+                        groupExists = false;
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+                if (!groupExists)
+                {
+                    newGroup = ad.Children.Add(groupName, "group");
+                    newGroup.CommitChanges();
+                }
             }
             catch (Exception ex)
             {
                 //_logger.LogError(ex, $"Error adding new group: '{groupName}' on gateway: '{server}'.");
-                success = false;
+                newGroup = null;
             }
 
-            return success;
+            return newGroup;
         }
         private void DeleteGroups(string serverName, List<LocalGroup> groupsToDelete)
         {
@@ -501,12 +552,41 @@ namespace RemoteDesktopCleaner.BackgroundServices
         public bool DeleteGroup2(string groupName, string server)
         {
             var success = true;
+            string username = "svcgtw";
+            string password = "7KJuswxQnLXwWM3znp";
+            bool groupExists = false;
+            DirectoryEntry newGroup = null;
             //Logger.LogDebug($"Removing group '{groupName}' from gateway '{server}'.");
             try
             {
-                var machineContext = new PrincipalContext(ContextType.Machine, server);
-                var groupPr = GroupPrincipal.FindByIdentity(machineContext, groupName);
-                groupPr?.Delete();
+                //using (var machineContext = new PrincipalContext(ContextType.Machine, server, null, username, password))
+                //{
+                //    var groupPr = GroupPrincipal.FindByIdentity(machineContext, groupName);
+                //    groupPr?.Delete();
+                //}
+                var ad = new DirectoryEntry($"WinNT://{server},computer", username, password);
+                try
+                {
+                    newGroup = ad.Children.Find(groupName, "group");
+                    groupExists = true;
+                }
+                catch (System.Runtime.InteropServices.COMException ex)
+                {
+                    if (ex.ErrorCode == -2147022675) // Group not found.
+                    {
+                        groupExists = false;
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+                if (groupExists)
+                {
+                    newGroup = ad.Children.Remove(groupName);
+                    newGroup.CommitChanges();
+                    success = true;
+                }
             }
             catch (Exception ex)
             {
