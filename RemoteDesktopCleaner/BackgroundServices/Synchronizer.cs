@@ -1,123 +1,180 @@
 ﻿using System;
-using System.Collections.Generic;
+using RemoteDesktopCleaner.BackgroundServices;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using System.DirectoryServices;
+using System.Management;
+using System.Collections.Generic;
+using System.Management.Automation;
+using Microsoft.Extensions.Hosting;
 using NLog;
 using RemoteDesktopCleaner.BackgroundServices;
-//using RemoteDesktopAccessCleaner.Models;
-//using RemoteDesktopAccessCleaner.Modules.ConfigComparison;
-//using RemoteDesktopAccessCleaner.Modules.ConfigProvider;
-//using RemoteDesktopAccessCleaner.Modules.Gateway;
-//using RemoteDesktopAccessCleaner.Modules.Gateway.GroupManagement;
-//using RemoteDesktopAccessCleaner.Modules.ServiceCommunicator;
-//using RemoteDesktopAccessCleaner.Report;
+using Microsoft.Management.Infrastructure;
+//using RemoteDesktopCleaner.Modules.FileArchival;
+using Microsoft.Management.Infrastructure;
+using Microsoft.Management.Infrastructure.Options;
+using System.Security;
+using System.Net;
+using System.Management.Automation.Runspaces;
+using System.Collections;
+using System.Text.Json;
+using System.DirectoryServices.AccountManagement;
+using RemoteDesktopCleaner.Data;
+using System.Text;
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {
     public class Synchronizer : ISynchronizer
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
-        //private readonly IGatewayScanner _gatewayScanner;
-        //private readonly IConfigComparer _configComparer;
-        //private readonly IConfigReader _configReader;
-        //private readonly IGroupSynchronizer _groupSynchronizer;
-        //private readonly IRapSynchronizer _rapSynchronizer;
-        //private readonly IReporter _reporter;
-        //private readonly IServiceCommunicator _serviceCommunicator;
-
-        //public Synchronizer(igatewayscanner gatewayscanner, iconfigreader configreader, iconfigcomparer configcomparer, ireporter reporter, igroupsynchronizer groupsynchronizer, irapsynchronizer rapsynchronizer, iservicecommunicator servicecommunicator)
-        //{
-        //    _gatewayscanner = gatewayscanner;
-        //    _configreader = configreader;
-        //    _configcomparer = configcomparer;
-        //    _reporter = reporter;
-        //    _groupsynchronizer = groupsynchronizer;
-        //    _rapsynchronizer = rapsynchronizer;
-        //    _servicecommunicator = servicecommunicator;
-        //}
-
         public Synchronizer()
         {
 
         }
+        public async void SynchronizeAsync(string serverName)
+        {
+            try
+            {
+                //_reporter.Start(serverName); // pravi se loger
+                Logger.Debug($"Starting the synchronization of '{serverName}' gateway.");
+                var taskGtRapNames = GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
+                if (DownloadGatewayConfig(serverName))
+                { // ako uspesno loadujes local group names i napravis LG objekte // ubaci da baci gresku ako je prazno
+                    var cfgDiscrepancy = GetConfigDiscrepancy(serverName); // ovo je diff izmedju MODEL-a i CERNGT01, tj diff kojim treba CERNGT01 da se updatuje
+                    var changedLocalGroups = FilterChangedLocalGroups(cfgDiscrepancy.LocalGroups); // devide diff into groups: group for adding LGs, group for deleting LGs, group for changing LGs (adding/deleting computers/members)
+                    //InitReport(serverName, changedLocalGroups); // write a report
+                    var addedGroups = SyncLocalGroups(changedLocalGroups, serverName); // add/remove/update LGs with cfgDiscrepancy/changedLocalGroups, return added groups
+                    var allGatewayGroups = GetAllGatewayGroupsAfterSynchronization(cfgDiscrepancy, addedGroups); // get LGs which are updated with members and computers (not removed or added) and append with new added groups, so we have now current active groups
+                    Logger.Info($"Awaiting getting gateway RAP names for '{serverName}'.");
+                    //var gatewayRapNames = await taskGtRapNames; // update server CERNGT01, get all raps from CERNGT01
+                    //    Logger.Info($"Finished getting gateway RAP names for '{serverName}'.");
+                    SynchronizeRaps(serverName, allGatewayGroups, taskGtRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
+                }
+                //_reporter.Finish(serverName); // create log file and send it to email
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, $"Error while synchronizing gateway: '{serverName}'.");
+                //_reporter.Finish(serverName);
+            }
+            Console.WriteLine($"Finished synchronization for gateway '{serverName}'.");
+        }
+        private List<string> GetGatewaysRapNamesAsync(string serverName)
+        {
+            //_logger.LogInformation($"Getting RAP names from gateway '{serverName}'.");
+            try
+            {
+                return GetGatewayRapNamesAsync2(serverName);
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogError(ex, $"Failed getting RAP names from gateway '{serverName}'.");
+                throw;
+            }
+        }
+        public List<string> GetGatewayRapNamesAsync2(string serverName)
+        {
+            return QueryGatewayRapNamesAsync(serverName);
+        }
 
-        //public async void SynchronizeAsync(string serverName)
-        //{
-        //    try
-        //    {
-        //        _reporter.Start(serverName); // pravi se loger
-        //        Logger.Debug($"Starting the synchronization of '{serverName}' gateway.");
-        //        var taskGtRapNames = GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
-        //        if (_gatewayScanner.DownloadGatewayConfig(serverName))
-        //        { // ako uspesno loadujes local group names i napravis LG objekte // ubaci da baci gresku ako je prazno
-        //            var cfgDiscrepancy = GetConfigDiscrepancy(serverName); // ovo je diff izmedju MODEL-a i CERNGT01, tj diff kojim treba CERNGT01 da se updatuje
-        //            var changedLocalGroups = FilterChangedLocalGroups(cfgDiscrepancy.LocalGroups); // devide diff into groups: group for adding LGs, group for deleting LGs, group for changing LGs (adding/deleting computers/members)
-        //            InitReport(serverName, changedLocalGroups); // write a report
-        //            var addedGroups = _groupSynchronizer.SyncLocalGroups(changedLocalGroups, serverName); // add/remove/update LGs with cfgDiscrepancy/changedLocalGroups, return added groups
-        //            var allGatewayGroups = GetAllGatewayGroupsAfterSynchronization(cfgDiscrepancy, addedGroups); // get LGs which are updated with members and computers (not removed or added) and append with new added groups, so we have now current active groups
-        //            Logger.Info($"Awaiting getting gateway RAP names for '{serverName}'.");
-        //            var gatewayRapNames = await taskGtRapNames; // update server CERNGT01, get all raps from CERNGT01
-        //            Logger.Info($"Finished getting gateway RAP names for '{serverName}'.");
-        //            _rapSynchronizer.SynchronizeRaps(serverName, allGatewayGroups, gatewayRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
-        //        }
-        //        _reporter.Finish(serverName); // create log file and send it to email
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Logger.Error(ex, $"Error while synchronizing gateway: '{serverName}'.");
-        //        _reporter.Finish(serverName);
-        //    }
-        //    Console.WriteLine($"Finished synchronization for gateway '{serverName}'.");
-        //}
+        private List<string> QueryGatewayRapNamesAsync(string serverName)
+        {
+            var username = "svcgtw"; // replace with your username
+            var password = "7KJuswxQnLXwWM3znp"; // replace with your password
+            var securepassword = new SecureString();
+            foreach (char c in password)
+                securepassword.AppendChar(c);
+            const string AdSearchGroupPath = "WinNT://{0}/{1},group";
+            const string NamespacePath = @"\root\CIMV2\TerminalServices";
+            string _oldGatewayServerHost = @"\\cerngt01.cern.ch";
+            try
+            {
+                const string osQuery = "SELECT * FROM Win32_TSGatewayResourceAuthorizationPolicy";
+                CimCredential Credentials = new CimCredential(PasswordAuthenticationMechanism.Default, "cern.ch", username, securepassword);
 
-        //private GatewayConfig GetConfigDiscrepancy(string serverName)
-        //{
-        //    GatewayConfig modelCfg = _configReader.ReadValidConfigDbModel(); // ovo su objekti LG napravljeni bazom podataka koju smo obradili, invalid podatke izbacujemo (toDelete==1), ovo nosi ime MODEL (promeni u DATABASE)
-        //    GatewayConfig gatewayCfg = _configReader.ReadGatewayConfigFromFile(serverName); // ovo su LG objekti ucitani sa gatewaya, ovo nosi ime po serveru CERNGT01
-        //    return _configComparer.CompareWithModel(gatewayCfg, modelCfg);
-        //}
+                WSManSessionOptions SessionOptions = new WSManSessionOptions();
+                SessionOptions.AddDestinationCredentials(Credentials);
+                CimSession mySession = CimSession.Create(serverName, SessionOptions);
+                IEnumerable<CimInstance> queryInstance = mySession.QueryInstances(_oldGatewayServerHost + NamespacePath, "WQL", osQuery);
+                var rapNames = new List<string>();
+                Console.WriteLine($"Querying '{serverName}'.");
+                foreach (CimInstance x in queryInstance)
+                    rapNames.Add(x.CimInstanceProperties["Name"].Value.ToString());
 
-        //private Task<List<string>> GetGatewaysRapNamesAsync(string serverName)
-        //{
-        //    Logger.Info($"Getting RAP names from gateway '{serverName}'.");
-        //    try
-        //    {
-        //        return _serviceCommunicator.GetGatewayRapNames(serverName); // get all raps from CERNGT01 server
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Logger.Error(ex, $"Failed getting RAP names from gateway '{serverName}'.");
-        //        return Task.Run(() => new List<string>());
-        //    }
-        //}
+                return rapNames;
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogError(ex, "Error while getting rap names from gateway: '{serverName}'. Ex: {ex}");
+            }
 
-        //private void InitReport(string serverName, List<LocalGroup> changedLocalGroups)
-        //{
-        //    int shouldAdd = changedLocalGroups.Count(lg => lg.Name.StartsWith("+"));
-        //    int shouldDelete = changedLocalGroups.Count(lg => lg.Name.StartsWith("-"));
-        //    int shouldSync = changedLocalGroups.Count(lg => lg.Name.StartsWith("LG-"));
-        //    _reporter.SetShouldAddGroups(serverName, shouldAdd);
-        //    _reporter.SetShouldSynchronizeGroups(serverName, shouldSync);
-        //    _reporter.SetShouldDeleteGroups(serverName, shouldDelete);
-        //}
+            return new List<string>();
+        }
+        public bool DownloadGatewayConfig(string serverName)
+        {
+            return ReadRemoteGatewayConfig(serverName);
+        }
 
-        //private List<LocalGroup> FilterChangedLocalGroups(List<LocalGroup> allGroups)
-        //{
-        //    var groupsToDelete = allGroups.Where(lg => lg.Name.StartsWith("-")).ToList(); // LG to be deleted
-        //    var groupsToAdd = allGroups.Where(lg => lg.Name.StartsWith("+")).ToList(); // LG to be added
-        //    var changedContent = allGroups.Where(lg => lg.Name.StartsWith("LG-") && lg.Content.Any(content =>
-        //        content.StartsWith("S-1-5") || content.StartsWith("+") || content.StartsWith("-"))).ToList(); // LG whose computers or members will be added/deleted
-        //    var groupsToSync = groupsToDelete.Concat(groupsToAdd).Concat(changedContent).ToList(); // concatenate it, suvisno
-        //    return groupsToSync;
-        //}
+        private bool ReadRemoteGatewayConfig(string serverName)
+        {
+            try
+            {
+                // _reporter.Info(serverName, "Downloading the gateway config.");
+                var localGroups = new List<LocalGroup>();
+                var server = $"{serverName}.cern.ch";
+                var dstDir = AppConfig.GetInfoDir();
+                var path = dstDir + @"\" + serverName + ".json";
+                var localGroupNames = GetAllLocalGroups(server);
+                var i = 0;
+                foreach (var lg in localGroupNames)
+                {
+                    Console.Write(
+                        $"\rDownloading {serverName} config - {i + 1}/{localGroupNames.Count} - {100 * (i + 1) / localGroupNames.Count}%"); //TODO delete
+                    var members = GetGroupMembers(lg, serverName + ".cern.ch");
+                    localGroups.Add(new LocalGroup(lg, members));
+                    i++;
+                    //if (i > 6) break;
+                }
 
-        //private List<string> GetAllGatewayGroupsAfterSynchronization(GatewayConfig discrepancy, List<string> addedGroups)
-        //{
-        //    var alreadyExistingGroups = discrepancy.LocalGroups
-        //                                            .Where(lg => lg.Name.StartsWith("LG-"))
-        //                                            .Select(lg => lg.Name).ToList();
-        //    return alreadyExistingGroups.Concat(addedGroups).ToList();
-        //}
-        //}
+                File.WriteAllText(path, JsonSerializer.Serialize(localGroups));
+                // _reporter.Info(serverName, "Gateway config downloaded.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogDebug(ex, $"Error while reading gateway: '{serverName}' config.");
+                //_reporter.Error(serverName, "Error during downloading the gateway config.");
+                return false;
+            }
+        }
+        public List<string> GetAllLocalGroups(string serverName)
+        {
+            var localGroups = new List<string>();
+            try
+            {
+                string username = "svcgtw";
+                string password = "7KJuswxQnLXwWM3znp";
+
+                using (var groupEntry = new DirectoryEntry($"WinNT://{serverName},computer", username, password))
+                {
+                    foreach (DirectoryEntry child in (IEnumerable)groupEntry.Children)
+                    {
+                        if (child.SchemaClassName.Equals("group", StringComparison.OrdinalIgnoreCase) &&
+                            child.Name.StartsWith("LG-", StringComparison.OrdinalIgnoreCase))
+                        {
+                            localGroups.Add(child.Name);
+                        }
+                    }
+                }
+            }
+
+            catch (Exception ex)
+            {
+                //_logger.LogError(ex, $"Error getting all local groups on gateway: '{serverName}'.");
+            }
+
+            return localGroups;
+        }
     }
 }

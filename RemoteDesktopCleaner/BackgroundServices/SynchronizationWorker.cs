@@ -64,16 +64,16 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 {
                     //TODO run on each midnight
                     Console.WriteLine($"Starting weekly synchronization for the following gateways: {string.Join(",", gateways)}");
-                    //if (!_configValidator.MarkObsoleteData()) // running the cleaner
-                    //{
-                    //    Logger.Info("Failed validating model config. Existing one will be used.");
-                    //    Console.WriteLine("Failed validating model config. Existing one will be used.");
-                    //}
-                    //else
-                    //{
-                    //    Logger.Info("Failed validating model config. Existing one will be used.");
-                    //    Console.WriteLine("Failed validating model config. Existing one will be used.");
-                    //}
+                    if (!_configValidator.MarkObsoleteData()) // running the cleaner
+                    {
+                        //    Logger.Info("Failed validating model config. Existing one will be used.");
+                        Console.WriteLine("Failed validating model config. Existing one will be used.");
+                    }
+                    else
+                    {
+                        //    Logger.Info("Failed validating model config. Existing one will be used.");
+                        Console.WriteLine("Failed validating model config. Existing one will be used.");
+                    }
                     //var tasks = gateways
                     //    .Select(gateway => Task.Run(() => SynchronizeAsync(gateway)))
                     //    .ToList();
@@ -95,7 +95,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 //_reporter.Start(serverName); // pravi se loger
                 Logger.Debug($"Starting the synchronization of '{serverName}' gateway.");
-                //var taskGtRapNames = GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
+                var taskGtRapNames = GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
                 if (DownloadGatewayConfig(serverName))
                 { // ako uspesno loadujes local group names i napravis LG objekte // ubaci da baci gresku ako je prazno
                     var cfgDiscrepancy = GetConfigDiscrepancy(serverName); // ovo je diff izmedju MODEL-a i CERNGT01, tj diff kojim treba CERNGT01 da se updatuje
@@ -104,9 +104,9 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     var addedGroups = SyncLocalGroups(changedLocalGroups, serverName); // add/remove/update LGs with cfgDiscrepancy/changedLocalGroups, return added groups
                     var allGatewayGroups = GetAllGatewayGroupsAfterSynchronization(cfgDiscrepancy, addedGroups); // get LGs which are updated with members and computers (not removed or added) and append with new added groups, so we have now current active groups
                     Logger.Info($"Awaiting getting gateway RAP names for '{serverName}'.");
-                    //    var gatewayRapNames = await taskGtRapNames; // update server CERNGT01, get all raps from CERNGT01
+                    //var gatewayRapNames = await taskGtRapNames; // update server CERNGT01, get all raps from CERNGT01
                     //    Logger.Info($"Finished getting gateway RAP names for '{serverName}'.");
-                    //SynchronizeRaps(serverName, allGatewayGroups, taskGtRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
+                    SynchronizeRaps(serverName, allGatewayGroups, taskGtRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
                 }
                 //_reporter.Finish(serverName); // create log file and send it to email
             }
@@ -158,7 +158,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             //_reporter.Info(server, $"Synchronizing {lg.Name}.");
             var success = true;
             var localGroup = GetLocalGroup(server, lg.Name);
-            if (CleanFromOrphanedSids(localGroup, lg.Name, server)) // ovo popraviti jer nesto nije ok
+            if (CleanFromOrphanedSids(localGroup, lg, server)) // ovo popraviti jer nesto nije ok
             {
                 if (!SyncMember(localGroup, lg, server))
                     success = false;
@@ -189,14 +189,14 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 throw;
             }
         }
-        public bool CleanFromOrphanedSids(DirectoryEntry localGroup, string groupName, string serverName)
+        public bool CleanFromOrphanedSids(DirectoryEntry localGroup, LocalGroup lg, string serverName)
         {
             string username = "svcgtw";
             string password = "7KJuswxQnLXwWM3znp";
             try
             {
                 bool success;
-                success = RemoveOrphanedSids(localGroup);
+                success = RemoveOrphanedSids(localGroup, lg);
                 return success;
             }
             catch (Exception ex)
@@ -205,12 +205,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 return false;
             }
         }
-        private bool RemoveOrphanedSids(DirectoryEntry groupPrincipal)
+        private bool RemoveOrphanedSids(DirectoryEntry groupPrincipal, LocalGroup lg)
         {
             var success = true;
-            foreach (var memberObj in (IEnumerable)groupPrincipal.Invoke("Members", null))
+            var membersData = lg.MembersObj.Names.Zip(lg.MembersObj.Flags, (i, j) => new { Name = i, Flag = j });
+
+            foreach (var member in membersData)
             {
-                var member = new DirectoryEntry(memberObj);
                 if (!member.Name.StartsWith(Constants.OrphanedSid)) continue;
                 try
                 {
@@ -631,7 +632,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     var members = GetGroupMembers(lg, serverName + ".cern.ch");
                     localGroups.Add(new LocalGroup(lg, members));
                     i++;
-                    if (i > 6) break;
+                    //if (i > 6) break;
                 }
 
                 File.WriteAllText(path, JsonSerializer.Serialize(localGroups));
@@ -665,33 +666,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                         }
                     }
                 }
-            }
-            
-
-            //try
-            //{
-            //    using (PrincipalContext context = new PrincipalContext(ContextType.Machine, serverName, "svcgtw", "7KJuswxQnLXwWM3znp"))
-            //    {
-            //        using (GroupPrincipal groupPrincipal = new GroupPrincipal(context))
-            //        {
-            //            groupPrincipal.Name = $"*{",computer"}*";
-
-            //            using (PrincipalSearcher searcher = new PrincipalSearcher(groupPrincipal))
-            //            {
-            //                foreach (GroupPrincipal group in searcher.FindAll())
-            //                {
-            //                    Console.WriteLine("Group Name: {0}", group.Name);
-            //                }
-            //            }
-            //        }
-            //    }
-            //}
-            //catch (Exception ex)
-            //{
-            //    Console.WriteLine("Error: {0}", ex.Message);
-            //}
-
-
+            } 
 
             catch (Exception ex)
             {
@@ -822,51 +797,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
             return new List<string>();
         }
-        //private List<string> QueryGatewayRapNamesAsync(string serverName)
-        //{
-        //    try
-        //    {
-        //        //const string osQuery = "SELECT * FROM Win32_TSGatewayResourceAuthorizationPolicy";
-        //        //var userName = "svcgtw"; // Replace with your username
-        //        //var password = "7KJuswxQnLXwWM3znp"; // Replace with your password
-
-                //        //var securePassword = new SecureString();
-                //        //foreach (char c in password)
-                //        //    securePassword.AppendChar(c);
-
-                //        //WSManConnectionInfo connectionInfo = new WSManConnectionInfo
-                //        //{
-                //        //    ComputerName = serverName,
-                //        //    Credential = new PSCredential(userName, securePassword)
-                //        //};
-
-                //        //var runspace = RunspaceFactory.CreateRunspace(connectionInfo);
-                //        //runspace.Open();
-
-                //        //using (PowerShell ps = PowerShell.Create())
-                //        //{
-                //        //    ps.Runspace = runspace;
-                //        //    ps.AddScript($"Get-CimInstance -Namespace 'root/CIMV2' -Query '{osQuery}'");
-                //        //    var results = ps.Invoke();
-
-                //        //    var rapNames = new List<string>();
-                //        //    Console.WriteLine($"Querying '{serverName}'.");
-                //        //    foreach (var result in results)
-                //        //    {
-                //        //        rapNames.Add(result.Properties["Name"].Value.ToString());
-                //        //    }
-
-                //            return rapNames;
-                //        }
-                //    }
-                //    catch (Exception ex)
-                //    {
-                //        Console.WriteLine(ex.Message);
-                //        //_logger.LogError(ex, "Error while getting rap names from gateway: '{serverName}'. Ex: {ex}");
-                //    }
-
-                //    return new List<string>();
-                //}
 
         public class GatewayConfig
         {
@@ -1128,6 +1058,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             var toDelete = new List<string>(obsoleteRapNames);
             while (!(counter == 3 || finished))
             {
+                if (toDelete.Count == 0) break;
                 var response = DeleteRapsFromGateway(serverName, toDelete);
                 Console.WriteLine($"Deleting raps, try #{counter + 1}"); //TODO delete
                 //_logger.LogDebug($"Deleting raps, try #{counter + 1}");
@@ -1153,12 +1084,14 @@ namespace RemoteDesktopCleaner.BackgroundServices
         public bool AddMissingRaps(string serverName, List<string> missingRapNames)
         {
             var sHost = $@"\\{serverName}";
+            string _oldGatewayServerHost = @"\\cerngt01.cern.ch";
             try
             {
                 var oConn = new ConnectionOptions();
                 oConn.Impersonation = ImpersonationLevel.Impersonate;
                 oConn.Authentication = AuthenticationLevel.PacketPrivacy;
-
+                oConn.Username = "svcgtw";
+                oConn.Password = "7KJuswxQnLXwWM3znp";
                 var oMScope = new ManagementScope(sHost + NamespacePath, oConn);
                 oMScope.Options.Authentication = AuthenticationLevel.PacketPrivacy;
                 oMScope.Options.Impersonation = ImpersonationLevel.Impersonate;
@@ -1221,13 +1154,32 @@ namespace RemoteDesktopCleaner.BackgroundServices
         public List<RapsDeletionResponse> DeleteRapsFromGateway(string serverName, List<string> rapNamesToDelete)
         {
             var result = new List<RapsDeletionResponse>();
+            var username = "svcgtw"; // replace with your username
+            var password = "7KJuswxQnLXwWM3znp"; // replace with your password
+            var securepassword = new SecureString();
+            foreach (char c in password)
+                securepassword.AppendChar(c);
+            const string AdSearchGroupPath = "WinNT://{0}/{1},group";
+            const string NamespacePath = @"\root\CIMV2\TerminalServices";
+            string _oldGatewayServerHost = @"\\cerngt01.cern.ch";
             try
             {
                 string where = CreateWhereClause(rapNamesToDelete);
                 string osQuery =
                     "SELECT * FROM Win32_TSGatewayResourceAuthorizationPolicy " + where;
-                CimSession mySession = CimSession.Create(serverName);
-                IEnumerable<CimInstance> queryInstance = mySession.QueryInstances(NamespacePath, "WQL", osQuery);
+                CimCredential Credentials = new CimCredential(PasswordAuthenticationMechanism.Default, "cern.ch", username, securepassword);
+
+                WSManSessionOptions SessionOptions = new WSManSessionOptions();
+                SessionOptions.AddDestinationCredentials(Credentials);
+                CimSession mySession = CimSession.Create(serverName, SessionOptions);
+                IEnumerable<CimInstance> queryInstance = mySession.QueryInstances(_oldGatewayServerHost + NamespacePath, "WQL", osQuery);
+                //try
+                //{
+                //string where = CreateWhereClause(rapNamesToDelete);
+                //string osQuery =
+                //    "SELECT * FROM Win32_TSGatewayResourceAuthorizationPolicy " + where;
+                //    CimSession mySession = CimSession.Create(serverName);
+                //    IEnumerable<CimInstance> queryInstance = mySession.QueryInstances(NamespacePath, "WQL", osQuery);
                 //_logger.LogDebug($"Querying '{serverName}' for {rapNamesToDelete.Count} RAPs to delete.");
                 foreach (CimInstance rapInstance in queryInstance)
                 {
