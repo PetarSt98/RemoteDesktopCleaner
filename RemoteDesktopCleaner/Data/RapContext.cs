@@ -1,7 +1,4 @@
-﻿//using Microsoft.EntityFrameworkCore;
-//using RemoteDesktopCleaner.Data;
-using MySql.Data.MySqlClient;
-using MySql.Data.EntityFramework;
+﻿using MySql.Data.EntityFramework;
 using System.Data.Entity;
 
 
@@ -11,7 +8,7 @@ namespace RemoteDesktopCleaner.Data
     public partial class RapContext : DbContext
     {
         public RapContext()
-            : base("name=RapContext2")
+            : base("name=MySQL_DB")
         {
         }
 

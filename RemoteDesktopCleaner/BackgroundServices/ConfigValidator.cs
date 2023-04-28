@@ -1,20 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Configuration;
-using NLog;
-using MySql.Data.MySqlClient;
-using MySql.Data;
-using System.Collections.Generic;
+﻿using NLog;
 using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
-using System.DirectoryServices.ActiveDirectory;
 using RemoteDesktopCleaner.Data;
-using System.Collections.Generic;
-using System.IO;
-using System.Management.Automation;
 using System.Diagnostics;
-using System.Management.Automation.Runspaces;
 using RemoteDesktopCleaner.Exceptions;
 
 
@@ -30,8 +18,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
         private readonly List<string> _allowedNetworkDomains = new List<string> { "GPN", "LCG", "ITS", "CLOUD-EXP" };
         private const string username = "pstojkov";
         private const string password = "GeForce9800GT.";
-        //string scriptPath = @"C:\Users\pstojkov\cernbox\WINDOWS\Desktop\soap\SOAPNetworkService.ps1";
-        string scriptPath = "SOAPNetworkService.ps1";
         private PrincipalSearchResult<Principal> members;
         private PrincipalContext domainContext;
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
@@ -331,8 +317,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             try
             {
                 // Set the path to the script file
-                string scriptPath = @"C:\Users\pstojkov\cernbox\WINDOWS\Desktop\soap\SOAPNetworkService.ps1";
-
+                string scriptPath = $@"{Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName}\PowerShellScripts\SOAPNetworkService.ps1";
                 // Create a new ProcessStartInfo object with the necessary parameters
                 ProcessStartInfo startInfo = new ProcessStartInfo
                 {

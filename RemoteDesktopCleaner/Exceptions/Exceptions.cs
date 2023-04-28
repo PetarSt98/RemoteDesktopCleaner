@@ -70,3 +70,14 @@ namespace RemoteDesktopCleaner.Exceptions
         public ValidatorException(string message) : base(message) { }
     }
 }
+
+
+namespace RemoteDesktopCleaner.Exceptions
+{
+    class CloningException : Exception
+    {
+        public CloningException() : base() { }
+
+        public CloningException(string message) : base(message) { }
+    }
+}
