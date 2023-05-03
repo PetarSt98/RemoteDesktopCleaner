@@ -74,6 +74,17 @@ namespace RemoteDesktopCleaner.Exceptions
 
 namespace RemoteDesktopCleaner.Exceptions
 {
+    class NoAccesToDomain : Exception
+    {
+        public NoAccesToDomain() : base() { }
+
+        public NoAccesToDomain(string message) : base(message) { } 
+    }
+}
+
+
+namespace RemoteDesktopCleaner.Exceptions
+{
     class CloningException : Exception
     {
         public CloningException() : base() { }

@@ -37,7 +37,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 try
                 {
-                    CloneSQL2MySQLdb();
+                    //CloneSQL2MySQLdb();
 
                     Console.WriteLine($"Starting weekly synchronization for the following gateways: {string.Join(",", gateways)}");
                     if (_configValidator.MarkObsoleteData())
@@ -52,10 +52,22 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     }
 
                     _synchronizer.SynchronizeAsync("cerngt01");
-;
+                    break;
+                    ;
                 }
                 catch (OperationCanceledException)
                 {
+                    Logger.Info("Program canceled.");
+                    break;
+                }
+                catch (CloningException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Fatal(ex.ToString());
+                    Console.WriteLine(ex.ToString());
                     break;
                 }
             }
@@ -71,7 +83,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         private void CloneSQL2MySQLdb()
         {
-
+            Logger.Info("Started cloning RemoteDesktop database as MySQL database.");
             string scriptPath = $@"{Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName}\PowerShellScripts\database_copy_SQL2MySQL.ps1";
 
             // Create a new ProcessStartInfo object with the necessary parameters
@@ -89,9 +101,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
             process.Start();
 
             string errors = process.StandardError.ReadToEnd();
-            if (errors.Length > 0) throw new CloningException();
-
+            if (errors.Length > 0)
+            {
+                Logger.Fatal("Failed cloning RemoteDesktop database as MySQL database.");
+                throw new CloningException();
+            }
             process.WaitForExit();
+            Logger.Info("Successful cloning RemoteDesktop database as MySQL database.");
         }
 
     }

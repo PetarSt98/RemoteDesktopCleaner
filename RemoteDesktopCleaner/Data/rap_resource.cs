@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace RemoteDesktopCleaner.Data
 {
-    [Table("rap_resource")]
+    [Table("RAP_Resource")]
     public partial class rap_resource
     {
         [Key]

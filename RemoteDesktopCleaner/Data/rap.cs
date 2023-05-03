@@ -7,7 +7,7 @@ using System.Text.Json;
 
 namespace RemoteDesktopCleaner.Data
 {
-    [Table("rap")]
+    [Table("RAP")]
     public partial class rap
     {
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2214:DoNotCallOverridableMethodsInConstructors")]
