@@ -26,18 +26,17 @@ namespace RemoteDesktopCleaner.BackgroundServices
             try
             {
                 LoggerGeneral.Info($"Starting the synchronization of '{serverName}' gateway.");
-                var taskGtRapNames = _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
+                //var taskGtRapNames = _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
                 if (_gatewayLocalGroupSynchronizer.DownloadGatewayConfig(serverName))
                 { // ako uspesno loadujes local group names i napravis LG objekte // ubaci da baci gresku ako je prazno
                     var cfgDiscrepancy = GetConfigDiscrepancy(serverName); // ovo je diff izmedju MODEL-a i CERNGT01, tj diff kojim treba CERNGT01 da se updatuje
                     var changedLocalGroups = FilterChangedLocalGroups(cfgDiscrepancy.LocalGroups); // devide diff into groups: group for adding LGs, group for deleting LGs, group for changing LGs (adding/deleting computers/members)
-                    //InitReport(serverName, changedLocalGroups); // write a report
+
                     var addedGroups = _gatewayLocalGroupSynchronizer.SyncLocalGroups(changedLocalGroups, serverName); // add/remove/update LGs with cfgDiscrepancy/changedLocalGroups, return added groups
                     var allGatewayGroups = GetAllGatewayGroupsAfterSynchronization(cfgDiscrepancy, addedGroups); // get LGs which are updated with members and computers (not removed or added) and append with new added groups, so we have now current active groups
                     LoggerGeneral.Info($"Awaiting getting gateway RAP names for '{serverName}'.");
-                    //var gatewayRapNames = await taskGtRapNames; // update server CERNGT01, get all raps from CERNGT01
                     LoggerGeneral.Info($"Finished getting gateway RAP names for '{serverName}'.");
-                    _gatewayRapSynchronizer.SynchronizeRaps(serverName, allGatewayGroups, taskGtRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
+                    //_gatewayRapSynchronizer.SynchronizeRaps(serverName, allGatewayGroups, taskGtRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
                 }
                 //_reporter.Finish(serverName); // create log file and send it to email
             }

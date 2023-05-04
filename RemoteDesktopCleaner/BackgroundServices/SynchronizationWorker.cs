@@ -53,7 +53,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
                     _synchronizer.SynchronizeAsync("cerngt01");
                     break;
-                    ;
                 }
                 catch (OperationCanceledException)
                 {

@@ -57,6 +57,8 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     }
                     foreach (var rapRow in raps)
                     {
+                        //if (i > 20) break;
+                        LoggerRaps.Debug($"Rap login to be processed {rapRow.login}");
                         Console.Write($"\r{i}/{raps.Count} - {100 * i / raps.Count}% ");
                         i++;
 
@@ -87,7 +89,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     LoggerGeneral.Info("Finished validation of  DB RAPs and corresponding Resources.");
                     Console.WriteLine("Finished validation of  DB RAPs and corresponding Resources.");
 
-                    db.SaveChanges();
+                    UpdateDatabase(db);
                     domainContext.Dispose();
                     return true;
                 }
@@ -98,6 +100,18 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 return false;
             }
         }
+
+        private void UpdateDatabase(RapContext db)
+        {
+            var rapsToDelete = db.raps.Where(r => r.toDelete == true).ToList();
+            db.raps.RemoveRange(rapsToDelete);
+
+            var rapResourcesToDelete = db.rap_resource.Where(rr => rr.toDelete == true).ToList();
+            db.rap_resource.RemoveRange(rapResourcesToDelete);
+
+            db.SaveChanges();
+        }
+
         private void IsEGroupInActiveDirectory(PrincipalContext domainContext, string groupName)
         {
             var primaryAccountsGroupPrincipal = new GroupPrincipal(domainContext, groupName);
@@ -118,6 +132,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             foreach (var resource in rapRow.rap_resource)
             {
+                LoggerRaps.Debug($"Rap {rapRow.login} resource to be processed: owner{resource.resourceOwner}, name: {resource.resourceName}");
                 var policyValidationResult = ValidatePolicy(rapRow.login, resource.resourceOwner, resource.resourceName, resource); // resource
                 ConsumeValidationResult(rapRow, resource, policyValidationResult);
             }
