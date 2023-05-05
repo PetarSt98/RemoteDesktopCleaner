@@ -34,6 +34,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             else
             {
                 members = null;
+                LoggerSingleton.General.Fatal("Unable to reach Domain.");
                 throw new NoAccesToDomain();
             }
         }
@@ -56,8 +57,8 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     }
                     foreach (var rapRow in raps)
                     {
-                        //if (i > 20) break;
-                        LoggerSingleton.Raps.Debug($"Rap login to be processed {rapRow.login}");
+                        if (i > 200) break;
+                        LoggerSingleton.Raps.Debug($"{i} - Rap login to be processed {rapRow.login}");
                         Console.Write($"\r{i}/{raps.Count} - {100 * i / raps.Count}% ");
                         i++;
 
@@ -129,18 +130,45 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         private void ValidateRapResources(rap rapRow)
         {
+            PolicyValidationResult policyValidationResult;
+
             foreach (var resource in rapRow.rap_resource)
             {
                 LoggerSingleton.Raps.Debug($"Rap {rapRow.login} resource to be processed: owner{resource.resourceOwner}, name: {resource.resourceName}");
-                var policyValidationResult = ValidatePolicy(rapRow.login, resource.resourceOwner, resource.resourceName, resource); // resource
+                if (CheckResourceValidity(resource))
+                {
+                    policyValidationResult = ValidatePolicy(rapRow.login, resource.resourceOwner, resource.resourceName, resource); // resource
+                    
+                }
+                else
+                {
+                    LoggerSingleton.Raps.Warn($"RAP_Resource {resource.RAPName} {resource.resourceName} has invalid data");
+                    policyValidationResult = new PolicyValidationResult(true, FailureDetail.LoginNotFound);
+                }
                 ConsumeValidationResult(rapRow, resource, policyValidationResult);
             }
         }
+
+        private bool CheckResourceValidity(rap_resource resource)
+        {
+            if (resource == null) return false;
+            if (resource.resourceOwner == null) return false;
+            if (resource.RAPName == null) return false;
+            if (resource.resourceName == null) return false;
+            return true;
+        }
+
         private void ConsumeValidationResult(rap rapRow, rap_resource resource, PolicyValidationResult result)
         {
             if (result.FailureDetail == FailureDetail.ValidationException)
             {
-                LoggerSingleton.Raps.Warn($"RAP-Resource '{rapRow.name}'-'{resource.resourceName}' skipped: {result.Message}");
+                if (result.Invalid)
+                {
+                    LoggerSingleton.Raps.Warn($"RAP-Resource '{rapRow.name}'-'{resource.resourceName}' skipped: {result.Message}");
+                    resource.invalid = result.Invalid;
+                }
+                else
+                    LoggerSingleton.Raps.Info($"RAP-Resource '{rapRow.name}'-'{resource.resourceName}' skipped: {result.Message}");
                 return;
             }
             if (result.FailureDetail == FailureDetail.ComputerNotFound)
@@ -178,8 +206,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
         private PolicyValidationResult ValidatePolicy(string login, string rapOwner, string computerName, rap_resource resource)
         {
             UserPrincipal rapOwnerPrincipal = null;
-           
-            
             var validationResult = new PolicyValidationResult(false);
             try
             {
@@ -204,7 +230,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                         LoggerSingleton.Raps.Warn(msg);
                     }
                     else if (bNetworkOk)
-                        return new PolicyValidationResult(true);
+                        return new PolicyValidationResult(false, "Good resource");
 
                     bool isUserAllowed = IsRapOwnerResponsible(domainContext, rapOwnerPrincipal, deviceInfo);
                     switch (isUserAllowed)
@@ -216,7 +242,9 @@ namespace RemoteDesktopCleaner.BackgroundServices
                             //messages.Append(msg);
                             break;
                         case true when bNetworkOk:
-                            return new PolicyValidationResult(true);
+                            return new PolicyValidationResult(false, "Rap owner is responsible, network domain name allowed ");
+                        case true when !bNetworkOk:
+                            return new PolicyValidationResult(true, "Rap owner is responsible, network domain name not allowed ");
                         default:
                             LoggerSingleton.Raps.Warn($"Account '{rapOwner}' is not allowed to manage computer '{computerName}'.");
                             //throw new InvalidPolicyException();
@@ -227,7 +255,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             catch (ValidatorException validatorEx)
             {
-                LoggerSingleton.Raps.Warn($"Error while validating policy: {validatorEx.Message}.");
+                LoggerSingleton.Raps.Warn($"Warning while validating policy: {validatorEx.Message}");
                 validationResult.FailureDetail = FailureDetail.ValidationException;
             }
             catch (ComputerNotFoundInActiveDirectoryException ex)
@@ -297,7 +325,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             catch (Exception)
             {
                 var errorMessage = "Unable to connect to the LAN WebService, computer validation couldn't be done.";
-                LoggerSingleton.Raps.Warn("Unable to connect to the LAN WebService, computer validation couldn't be done.");
+                LoggerSingleton.Raps.Error("Unable to connect to the LAN WebService, computer validation couldn't be done.");
                 throw new ValidatorException(errorMessage);
                 //return false;
             }
@@ -307,15 +335,23 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         private bool IsUserNiceGroupMember(PrincipalContext domainContext, UserPrincipal rapOwnerPrincipal)
         {
+            //var niceLocalAdminGroupPrincipal = GroupPrincipal.FindByIdentity(domainContext, GlobalAdminGroup);
+            //if (niceLocalAdminGroupPrincipal != null)
+            //{
+            //    var members = niceLocalAdminGroupPrincipal.GetMembers(true);
+            //    if (members.Contains(rapOwnerPrincipal))
+            //        return true;
+            //}
+
             if (members != null)
             {
-           
+
                 if (members.Contains(rapOwnerPrincipal)) // videti sto ovo ne radi
                     return true;
             }
 
             //Check if the RAP Owner is not member of Nice Group Manager and is not a primary account
-            if (!rapOwnerPrincipal.IsMemberOf(domainContext, IdentityType.SamAccountName, PrimaryAccountGroup))
+            if (rapOwnerPrincipal.IsMemberOf(domainContext, IdentityType.SamAccountName, PrimaryAccountGroup))
             {
                 return false;
             }

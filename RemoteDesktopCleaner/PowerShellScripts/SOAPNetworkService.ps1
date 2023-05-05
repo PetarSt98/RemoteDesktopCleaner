@@ -7,8 +7,11 @@ function Get-LanDbSet([string] $SetName,[String] $UserName,[String] $Password) {
                 $service.AuthValue = new-object SOAPNetworkService.Auth
                 $service.AuthValue.token = $service.getAuthToken($UserName,$Password,"NICE")
                 # Call to recursive function for set exploration - output file containing IP addresses at C:\temp.txt
-                $Interfaces = $service.getDeviceInfo($SetName)
-                return $Interfaces
+                $DeviceInfo = $service.getDeviceInfo($SetName)
+                $DeviceInfo | Add-Member -MemberType NoteProperty -Name NetworkDomainName -Value $DeviceInfo.Interfaces.NetworkDomainName
+                $DeviceInfo | Add-Member -MemberType NoteProperty -Name ResponsiblePersonName -Value $DeviceInfo.ResponsiblePerson.Name
+                $DeviceInfo | Add-Member -MemberType NoteProperty -Name ResponsiblePersonEmail -Value $DeviceInfo.ResponsiblePerson.Email
+                return $DeviceInfo
 }
 
 # example call to Get-LanDBSet:

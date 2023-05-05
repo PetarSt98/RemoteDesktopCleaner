@@ -59,10 +59,16 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 IEnumerable<CimInstance> queryInstance = mySession.QueryInstances(_oldGatewayServerHost + NamespacePath, "WQL", osQuery);
                 var rapNames = new List<string>();
                 Console.WriteLine($"Querying '{serverName}'.");
-                foreach (CimInstance x in queryInstance)
-                    rapNames.Add(x.CimInstanceProperties["Name"].Value.ToString());
-
-                LoggerSingleton.SynchronizedRaps.Debug($"Getting RAP/Policy names from gateway '{serverName}'.");
+                LoggerSingleton.SynchronizedRaps.Info($"Started querying RAP/Policy names from gateway '{serverName}'.");
+                var i = 1;
+                foreach (CimInstance x in queryInstance) 
+                {
+                    var policyName = x.CimInstanceProperties["Name"].Value.ToString();
+                    LoggerSingleton.SynchronizedRaps.Debug($"{i} - Querying RAP/Policy {policyName} from gateway '{serverName}'.");
+                    rapNames.Add(policyName);
+                    i++;
+                }
+                LoggerSingleton.SynchronizedRaps.Info($"Finished querying RAP/Policy names from gateway '{serverName}'.");
 
                 return rapNames;
             }

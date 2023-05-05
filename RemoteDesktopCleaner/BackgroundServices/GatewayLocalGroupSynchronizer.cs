@@ -25,18 +25,18 @@ namespace RemoteDesktopCleaner.BackgroundServices
             try
             {
                 LoggerSingleton.General.Info(serverName, "Downloading the gateway config.");
+                LoggerSingleton.SynchronizedLocalGroups.Info(serverName, "Downloading the gateway config.");
                 var localGroups = new List<LocalGroup>();
                 var server = $"{serverName}.cern.ch";
                 var dstDir = AppConfig.GetInfoDir();
                 var path = dstDir + @"\" + serverName + ".json";
                 var localGroupNames = GetAllLocalGroups(server);
-                var i = 0;
+                var i = 1;
                 foreach (var lg in localGroupNames)
                 {
                     //if (i > 5) break;
-                    Console.Write(
-                        $"\rDownloading {serverName} config - {i + 1}/{localGroupNames.Count} - {100 * (i + 1) / localGroupNames.Count}%"); //TODO delete
-                    LoggerSingleton.SynchronizedLocalGroups.Debug($"\rDownloading {serverName} config - {i + 1}/{localGroupNames.Count} - {100 * (i + 1) / localGroupNames.Count}%");
+                    Console.Write($"\rDownloading {serverName} config - {i + 1}/{localGroupNames.Count} - {100 * (i + 1) / localGroupNames.Count}%"); //TODO delete
+                    LoggerSingleton.SynchronizedLocalGroups.Debug($"\r {i} - Downloading {serverName} config - {i + 1}/{localGroupNames.Count} - {100 * (i + 1) / localGroupNames.Count}%");
                     var members = GetGroupMembers(lg, serverName + ".cern.ch");
                     localGroups.Add(new LocalGroup(lg, members));
                     i++;
@@ -44,6 +44,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
                 File.WriteAllText(path, JsonSerializer.Serialize(localGroups));
                 LoggerSingleton.General.Info(serverName, "Gateway config downloaded.");
+                LoggerSingleton.SynchronizedLocalGroups.Info(serverName, "Gateway config downloaded.");
                 return true;
             }
             catch (Exception ex)
@@ -69,7 +70,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
                             child.Name.StartsWith("LG-", StringComparison.OrdinalIgnoreCase))
                         {
                             localGroups.Add(child.Name);
-                            LoggerSingleton.SynchronizedLocalGroups.Debug($"DOwnloaded from {serverName}: {child.Name}");
                         }
                     }
                 }
