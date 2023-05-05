@@ -4,36 +4,32 @@ using NLog;
 using Microsoft.Management.Infrastructure;
 using Microsoft.Management.Infrastructure.Options;
 using System.Security;
-using System.Collections;
 using System.Text.Json;
 using System.Text;
-
+using RemoteDesktopCleaner.Loggers;
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {
     public class GatewayRapSynchronizer : IGatewayRapSynchronizer
     {
-        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         private const string AdSearchGroupPath = "WinNT://{0}/{1},group";
         private const string NamespacePath = @"\root\CIMV2\TerminalServices";
         private readonly DirectoryEntry _rootDir = new DirectoryEntry("LDAP://DC=cern,DC=ch");
 
-        public GatewayRapSynchronizer()
-        {
-
-        }
-
+        public GatewayRapSynchronizer() { }
 
         public List<string> GetGatewaysRapNamesAsync(string serverName)
         {
-            //_logger.LogInformation($"Getting RAP names from gateway '{serverName}'.");
+            LoggerSingleton.General.Info($"Getting RAP/Policy names from gateway '{serverName}'.");
+            LoggerSingleton.SynchronizedRaps.Info($"Getting RAP/Policy names from gateway '{serverName}'.");
             try
             {
                 return GetRapNamesAsync(serverName);
             }
             catch (Exception ex)
             {
-                //_logger.LogError(ex, $"Failed getting RAP names from gateway '{serverName}'.");
+                LoggerSingleton.SynchronizedRaps.Error(ex, $"Failed getting RAP/Policy names from gateway '{serverName}'.");
+                LoggerSingleton.General.Error(ex, $"Failed getting RAP/Policy names from gateway '{serverName}'.");
                 throw;
             }
         }
@@ -66,48 +62,28 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 foreach (CimInstance x in queryInstance)
                     rapNames.Add(x.CimInstanceProperties["Name"].Value.ToString());
 
+                LoggerSingleton.SynchronizedRaps.Debug($"Getting RAP/Policy names from gateway '{serverName}'.");
+
                 return rapNames;
             }
             catch (Exception ex)
             {
-                //_logger.LogError(ex, "Error while getting rap names from gateway: '{serverName}'. Ex: {ex}");
+                LoggerSingleton.General.Fatal(ex, $"Error while getting rap names from gateway: '{serverName}'. Ex: {ex}");
+                LoggerSingleton.SynchronizedRaps.Fatal(ex, $"Error while getting rap names from gateway: '{serverName}'. Ex: {ex}");
             }
 
             return new List<string>();
         }
-        public List<string> GetAllLocalGroups(string serverName)
-        {
-            var localGroups = new List<string>();
-            try
-            {
-                string username = "svcgtw";
-                string password = "7KJuswxQnLXwWM3znp";
 
-                using (var groupEntry = new DirectoryEntry($"WinNT://{serverName},computer", username, password))
-                {
-                    foreach (DirectoryEntry child in (IEnumerable)groupEntry.Children)
-                    {
-                        if (child.SchemaClassName.Equals("group", StringComparison.OrdinalIgnoreCase) &&
-                            child.Name.StartsWith("LG-", StringComparison.OrdinalIgnoreCase))
-                        {
-                            localGroups.Add(child.Name);
-                        }
-                    }
-                }
-            }
-
-            catch (Exception ex)
-            {
-                //_logger.LogError(ex, $"Error getting all local groups on gateway: '{serverName}'.");
-            }
-
-            return localGroups;
-        }
         public void SynchronizeRaps(string serverName, List<string> allGatewayGroups, List<string> gatewayRaps)
         {
+            LoggerSingleton.General.Info($"Starting Policy synchronisation of server: '{serverName}'.");
+            LoggerSingleton.SynchronizedRaps.Info($"Starting Policy synchronisation of server: '{serverName}'.");
             var modelRapNames = allGatewayGroups.Select(LgNameToRapName).ToList();
             DeleteObsoleteRaps(serverName, modelRapNames, gatewayRaps);
             AddMissingRaps(serverName, modelRapNames, gatewayRaps);
+            LoggerSingleton.General.Info($"Finished Policy synchronisation of server: '{serverName}'.");
+            LoggerSingleton.SynchronizedRaps.Info($"Finished Policy synchronisation of server: '{serverName}'.");
         }
         private static string LgNameToRapName(string lgName)
         {
@@ -117,12 +93,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             var obsoleteRapNames = gatewayRaps.Except(modelRapNames).ToList();
             //_reporter.SetShouldDeleteRaps(serverName, obsoleteRapNames.Count);
-            //_reporter.Info(serverName, $"Deleting {obsoleteRapNames.Count} RAPs from the gateway.");
-            //_logger.LogInformation($"Deleting {obsoleteRapNames.Count} RAPs from the gateway '{serverName}'.");
+            LoggerSingleton.General.Info($"Server:{serverName} Deleting {obsoleteRapNames.Count} RAPs from the gateway.");
+            LoggerSingleton.SynchronizedRaps.Info($"Deleting {obsoleteRapNames.Count} RAPs from the gateway '{serverName}'.");
             if (obsoleteRapNames.Count > 0)
                 TryDeletingRaps(serverName, obsoleteRapNames);
             //_reporter.Info(serverName, "Finished deleting RAPs.");
-            //_logger.LogInformation($"Finished deleting RAPs from the gateway '{serverName}'.");
+            LoggerSingleton.General.Info($"Finished deleting RAPs from the gateway '{serverName}'.");
+            LoggerSingleton.SynchronizedRaps.Info($"Finished deleting RAPs from the gateway '{serverName}'.");
         }
 
         private void AddMissingRaps(string serverName, List<string> modelRapNames, List<string> gatewayRapNames)
@@ -130,10 +107,12 @@ namespace RemoteDesktopCleaner.BackgroundServices
             var missingRapNames = modelRapNames.Except(gatewayRapNames).ToList();
             //_reporter.SetShouldAddRaps(serverName, missingRapNames.Count);
             //_reporter.Info(serverName, $"Adding {missingRapNames.Count} RAPs to the gateway.");
-            //_logger.LogInformation($"Adding {missingRapNames.Count} RAPs to the gateway '{serverName}'.");
+            LoggerSingleton.General.Info($"Adding {missingRapNames.Count} RAPs to the gateway '{serverName}'.");
+            LoggerSingleton.SynchronizedRaps.Info($"Adding {missingRapNames.Count} RAPs to the gateway '{serverName}'.");
             AddMissingRaps(serverName, missingRapNames);
             //_reporter.Info(serverName, "Finished adding RAPs.");
-            //_logger.LogInformation($"Finished adding {missingRapNames.Count} RAPs to the gateway '{serverName}'.");
+            LoggerSingleton.General.Info($"Finished adding {missingRapNames.Count} RAPs to the gateway '{serverName}'.");
+            LoggerSingleton.SynchronizedRaps.Info($"Finished adding {missingRapNames.Count} RAPs to the gateway '{serverName}'.");
         }
         private void TryDeletingRaps(string serverName, List<string> obsoleteRapNames)
         {
@@ -145,20 +124,20 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 if (toDelete.Count == 0) break;
                 var response = DeleteRapsFromGateway(serverName, toDelete);
                 Console.WriteLine($"Deleting raps, try #{counter + 1}"); //TODO delete
-                //_logger.LogDebug($"Deleting raps, try #{counter + 1}");
+                LoggerSingleton.SynchronizedRaps.Debug($"Deleting raps, try #{counter + 1}");
                 foreach (var res in response)
                 {
                     if (res.Deleted)
                     {
                         //_reporter.IncrementDeletedRaps(serverName);
                         Console.WriteLine($"Deleted '{res.RapName}'.");
-                        //_logger.LogDebug($"Deleted '{res.RapName}'.");
+                        LoggerSingleton.SynchronizedRaps.Debug($"Deleted '{res.RapName}'.");
                         if (toDelete.Count == 0) finished = true;
                     }
                     else
                     {
                         Console.WriteLine($"Failed deleting '{res.RapName}'."); //TODO delete
-                        //_logger.LogDebug($"Failed deleting '{res.RapName}'.");
+                        LoggerSingleton.SynchronizedRaps.Error($"Failed deleting '{res.RapName}'.");
                     }
                 }
                 toDelete = toDelete.Except(response.Where(r => r.Deleted).Select(r => r.RapName)).ToList();
@@ -201,7 +180,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 foreach (var rapName in missingRapNames)
                 {
                     //_reporter.Info(serverName, $"Adding '{rapName}'.");
-                    //_logger.LogInformation($"Adding new RAP '{rapName}' to the gateway '{serverName}'.");
+                    LoggerSingleton.SynchronizedRaps.Info($"Adding new RAP '{rapName}' to the gateway '{serverName}'.");
                     var groupName = ConvertToLgName(rapName);
                     inParameters["Name"] = "" + rapName;
                     inParameters["ResourceGroupName"] = groupName;
@@ -212,20 +191,20 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     if ((uint)outParameters["ReturnValue"] == 0)
                     {
                         Console.WriteLine($"{rapName} created. {++i}/{missingRapNames.Count}"); //TODO delete
-                        //_logger.LogInformation($"RAP '{rapName}' added to the gateway '{serverName}'.");
+                        LoggerSingleton.SynchronizedRaps.Info($"RAP '{rapName}' added to the gateway '{serverName}'.");
                         //_reporter.IncrementAddedRaps(serverName);
                     }
-                    //else
-                    //{
-                    //    _reporter.Warn(serverName, $"Failed adding new RAP '{rapName}'. Error code: '{(uint)outParameters["ReturnValue"]}'.");
-                    //    _logger.LogWarning($"Error creating RAP: '{rapName}'. Reason: {(uint)outParameters["ReturnValue"]}.");
-                    //}
+                    else
+                    {
+                        //    _reporter.Warn(serverName, $"Failed adding new RAP '{rapName}'. Error code: '{(uint)outParameters["ReturnValue"]}'.");
+                        LoggerSingleton.SynchronizedRaps.Error($"Error creating RAP: '{rapName}'. Reason: {(uint)outParameters["ReturnValue"]}.");
+                    }
                 }
                 return true;
             }
             catch (System.Exception ex)
             {
-                //_logger.LogError(ex, $"Error when adding new RAPs to the gateway '{serverName}'.");
+                LoggerSingleton.SynchronizedRaps.Error(ex, $"Error when adding new RAPs to the gateway '{serverName}'.");
                 //_reporter.Error(serverName, $"Exception when adding missing RAPs to the gateway. Details: {ex.Message}");
                 return false;
             }
@@ -261,14 +240,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 {
                     var rapName = rapInstance.CimInstanceProperties["Name"].Value.ToString();
                     if (!rapNamesToDelete.Contains(rapName)) continue;
-
                     var rapDeletion = DeleteRap(mySession, rapInstance, rapName);
                     result.Add(rapDeletion);
                 }
             }
             catch (Exception ex)
             {
-                //_logger.LogError($"Error while getting rap names from gateway: '{serverName}'.Ex: {ex}");
+                LoggerSingleton.SynchronizedRaps.Error($"Error while getting rap names from gateway: '{serverName}'.Ex: {ex}");
             }
 
             return result;
@@ -298,12 +276,12 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 if (int.Parse(result.ReturnValue.Value.ToString()) == 0)
                 {
                     rapDeletion.Deleted = true;
-                    //_logger.LogDebug($"Deleted RAP '{rapName}'.");
+                    LoggerSingleton.SynchronizedRaps.Info($"Deleted RAP '{rapName}'.");
                 }
             }
             catch (Exception ex)
             {
-                //_logger.LogWarning(ex, $"Error deleting rap '{rapName}'.");
+                LoggerSingleton.SynchronizedRaps.Error(ex, $"Error deleting rap '{rapName}'.");
             }
 
             return rapDeletion;

@@ -1,17 +1,13 @@
-﻿using System.DirectoryServices;
-using Microsoft.Extensions.Hosting;
-using NLog;
+﻿using NLog;
 using System.Text.Json;
 using RemoteDesktopCleaner.Data;
+using RemoteDesktopCleaner.Loggers;
 
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {
     public class Synchronizer : ISynchronizer
     {
-        private static readonly Logger LoggerGeneral = LogManager.GetLogger("logfileGeneral");
-        private static readonly Logger LoggerSynchronizedLocalGroups = LogManager.GetLogger("logfileSynchronizedLocalGroups");
-        private static readonly Logger LoggerSynchronizedRAPs = LogManager.GetLogger("logfileSynchronizedRAPs");
         private readonly IGatewayRapSynchronizer _gatewayRapSynchronizer;
         private readonly IGatewayLocalGroupSynchronizer _gatewayLocalGroupSynchronizer;
 
@@ -25,8 +21,8 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             try
             {
-                LoggerGeneral.Info($"Starting the synchronization of '{serverName}' gateway.");
-                //var taskGtRapNames = _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
+                LoggerSingleton.General.Info($"Starting the synchronization of '{serverName}' gateway.");
+                var taskGtRapNames = _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(serverName); // get all raps from CERNGT01
                 if (_gatewayLocalGroupSynchronizer.DownloadGatewayConfig(serverName))
                 { // ako uspesno loadujes local group names i napravis LG objekte // ubaci da baci gresku ako je prazno
                     var cfgDiscrepancy = GetConfigDiscrepancy(serverName); // ovo je diff izmedju MODEL-a i CERNGT01, tj diff kojim treba CERNGT01 da se updatuje
@@ -34,15 +30,15 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
                     var addedGroups = _gatewayLocalGroupSynchronizer.SyncLocalGroups(changedLocalGroups, serverName); // add/remove/update LGs with cfgDiscrepancy/changedLocalGroups, return added groups
                     var allGatewayGroups = GetAllGatewayGroupsAfterSynchronization(cfgDiscrepancy, addedGroups); // get LGs which are updated with members and computers (not removed or added) and append with new added groups, so we have now current active groups
-                    LoggerGeneral.Info($"Awaiting getting gateway RAP names for '{serverName}'.");
-                    LoggerGeneral.Info($"Finished getting gateway RAP names for '{serverName}'.");
-                    //_gatewayRapSynchronizer.SynchronizeRaps(serverName, allGatewayGroups, taskGtRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
+                    LoggerSingleton.General.Info($"Awaiting getting gateway RAP names for '{serverName}'.");
+                    LoggerSingleton.General.Info($"Finished getting gateway RAP names for '{serverName}'.");
+                    _gatewayRapSynchronizer.SynchronizeRaps(serverName, allGatewayGroups, taskGtRapNames); // UPDATE SERVER CERNGT01, gatewayRapNames are raps from server CERNGT01
                 }
                 //_reporter.Finish(serverName); // create log file and send it to email
             }
             catch (Exception ex)
             {
-                LoggerGeneral.Error(ex, $"Error while synchronizing gateway: '{serverName}'.");
+                LoggerSingleton.General.Error(ex, $"Error while synchronizing gateway: '{serverName}'.");
                 //_reporter.Finish(serverName);
             }
             Console.WriteLine($"Finished synchronization for gateway '{serverName}'.");
@@ -50,7 +46,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         private GatewayConfig GetConfigDiscrepancy(string serverName)
         {
-            LoggerGeneral.Info("Started comparing Local Groups and members from database and server");
+            LoggerSingleton.General.Info("Started comparing Local Groups and members from database and server");
             GatewayConfig modelCfg = ReadValidConfigDbModel();
             GatewayConfig gatewayCfg = ReadGatewayConfigFromFile(serverName);
             return CompareWithModel(gatewayCfg, modelCfg);
@@ -58,7 +54,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         public GatewayConfig ReadGatewayConfigFromFile(string serverName)
         {
-            LoggerGeneral.Info($"Reading config for gateway: '{serverName}' from file.");
+            LoggerSingleton.General.Info($"Reading config for gateway: '{serverName}' from file.");
             var lgGroups = GetGatewayLocalGroupsFromFile(serverName);
             var cfg = new GatewayConfig(serverName, lgGroups);
             return cfg;
@@ -72,21 +68,21 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 var dstDir = AppConfig.GetInfoDir();
                 var path = dstDir + @"\" + serverName + ".json";
                 var content = File.ReadAllText(path); // ucitamo iz jsona koji smo napravili, ucitamo LG-ove sa CERNGT01
-                LoggerSynchronizedLocalGroups.Debug($"Reading local groups for '{serverName}' from file.");
-                LoggerGeneral.Debug($"Reading local groups for '{serverName}' from file.");
+                LoggerSingleton.SynchronizedLocalGroups.Debug($"Reading local groups for '{serverName}' from file.");
+                LoggerSingleton.General.Debug($"Reading local groups for '{serverName}' from file.");
                 localGroups.AddRange(Newtonsoft.Json.JsonConvert.DeserializeObject<List<LocalGroup>>(content)); // deserialize mora kad se cita iz jsona
                 return localGroups;
             }
             catch (Exception ex)
             {
-                LoggerGeneral.Fatal($"{ex.ToString()} Error while reading local groups of server: '{serverName}'");
+                LoggerSingleton.General.Fatal($"{ex.ToString()} Error while reading local groups of server: '{serverName}'");
                 throw;
             }
         }
 
         public GatewayConfig ReadValidConfigDbModel()
         {
-            LoggerGeneral.Info("Getting valid config model.");
+            LoggerSingleton.General.Info("Getting valid config model.");
             var raps = GetRaps();
             var localGroups = new List<LocalGroup>();
             var validRaps = raps.Where(IsRapValid);
@@ -105,7 +101,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         public GatewayConfig CompareWithModel(GatewayConfig gatewayCfg, GatewayConfig modelCfg)
         {
-            LoggerGeneral.Debug($"Comparing gateway '{gatewayCfg.ServerName}' config to DB model.");
+            LoggerSingleton.General.Debug($"Comparing gateway '{gatewayCfg.ServerName}' config to DB model.");
             //_reporter.Info(gatewayCfg.ServerName, $"Comparing gateway '{gatewayCfg.ServerName}' config to DB model.");
             var diff = new GatewayConfig(gatewayCfg.ServerName); // napravimo novi objekat LG koji ce da nosi razliku izmedju MODEL-a i CERNGT01
             var modelLgs = modelCfg.LocalGroups; // izvuci lokalne grupe iz objekta
@@ -120,11 +116,11 @@ namespace RemoteDesktopCleaner.BackgroundServices
             var results = new List<LocalGroup>();
             foreach (var gtLocalGroup in gatewayCfg.LocalGroups)
             {
-                LoggerSynchronizedLocalGroups.Info($"Checkf if {gtLocalGroup.Name} exists in DB");
+                LoggerSingleton.SynchronizedLocalGroups.Info($"Checkf if {gtLocalGroup.Name} exists in DB");
                 LocalGroup lgDiff;
                 if (IsInConfig(gtLocalGroup.Name, modelCfg))
                 {
-                    LoggerSynchronizedLocalGroups.Debug($"{gtLocalGroup.Name} exists in DB, check members and devices");
+                    LoggerSingleton.SynchronizedLocalGroups.Debug($"{gtLocalGroup.Name} exists in DB, check members and devices");
                     lgDiff = new LocalGroup(gtLocalGroup.Name, LocalGroupFlag.CheckForUpdate);
                     var modelLocalGroup = modelCfg.LocalGroups.First(lg => lg.Name == gtLocalGroup.Name);
                     //lgDiff.Computers.AddRange(GetListDiscrepancy(modelLocalGroup.Computers, gtLocalGroup.Computers));
@@ -202,7 +198,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             catch (Exception ex)
             {
-                LoggerGeneral.Warn($"{ex.ToString()} Failed saving gateway: '{diff.ServerName}' discrepancy config to file.");
+                LoggerSingleton.General.Warn($"{ex.ToString()} Failed saving gateway: '{diff.ServerName}' discrepancy config to file.");
             }
         }
 
@@ -239,7 +235,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             catch (Exception ex)
             {
-                LoggerGeneral.Fatal($"Failed query. {ex}");
+                LoggerSingleton.General.Fatal($"Failed query. {ex}");
                 Console.WriteLine("Failed query.");
             }
 

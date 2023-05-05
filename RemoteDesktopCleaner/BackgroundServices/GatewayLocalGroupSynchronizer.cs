@@ -2,14 +2,13 @@
 using NLog;
 using System.Collections;
 using System.Text.Json;
+using RemoteDesktopCleaner.Loggers;
 
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {
     public class GatewayLocalGroupSynchronizer : IGatewayLocalGroupSynchronizer
     {
-        private static readonly Logger LoggerGeneral = LogManager.GetLogger("logfileGeneral");
-        private static readonly Logger LoggerSynchronizedLocalGroups = LogManager.GetLogger("logfileSynchronizedLocalGroups");
         private const string AdSearchGroupPath = "WinNT://{0}/{1},group";
         private const string NamespacePath = @"\root\CIMV2\TerminalServices";
         private readonly DirectoryEntry _rootDir = new DirectoryEntry("LDAP://DC=cern,DC=ch");
@@ -18,14 +17,14 @@ namespace RemoteDesktopCleaner.BackgroundServices
         }
         public bool DownloadGatewayConfig(string serverName)
         {
-            LoggerGeneral.Info($"Started fetching Local Groups from the server {serverName}");
+            LoggerSingleton.General.Info($"Started fetching Local Groups from the server {serverName}");
             return ReadRemoteGatewayConfig(serverName);
         }
         private bool ReadRemoteGatewayConfig(string serverName)
         {
             try
             {
-                LoggerGeneral.Info(serverName, "Downloading the gateway config.");
+                LoggerSingleton.General.Info(serverName, "Downloading the gateway config.");
                 var localGroups = new List<LocalGroup>();
                 var server = $"{serverName}.cern.ch";
                 var dstDir = AppConfig.GetInfoDir();
@@ -37,19 +36,19 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     //if (i > 5) break;
                     Console.Write(
                         $"\rDownloading {serverName} config - {i + 1}/{localGroupNames.Count} - {100 * (i + 1) / localGroupNames.Count}%"); //TODO delete
-                    LoggerSynchronizedLocalGroups.Debug($"\rDownloading {serverName} config - {i + 1}/{localGroupNames.Count} - {100 * (i + 1) / localGroupNames.Count}%");
+                    LoggerSingleton.SynchronizedLocalGroups.Debug($"\rDownloading {serverName} config - {i + 1}/{localGroupNames.Count} - {100 * (i + 1) / localGroupNames.Count}%");
                     var members = GetGroupMembers(lg, serverName + ".cern.ch");
                     localGroups.Add(new LocalGroup(lg, members));
                     i++;
                 }
 
                 File.WriteAllText(path, JsonSerializer.Serialize(localGroups));
-                LoggerGeneral.Info(serverName, "Gateway config downloaded.");
+                LoggerSingleton.General.Info(serverName, "Gateway config downloaded.");
                 return true;
             }
             catch (Exception ex)
             {
-                LoggerGeneral.Fatal($"{ex.ToString()} Error while reading gateway: '{serverName}' config.");
+                LoggerSingleton.General.Fatal($"{ex.ToString()} Error while reading gateway: '{serverName}' config.");
                 return false;
             }
         }
@@ -70,7 +69,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                             child.Name.StartsWith("LG-", StringComparison.OrdinalIgnoreCase))
                         {
                             localGroups.Add(child.Name);
-                            LoggerSynchronizedLocalGroups.Debug($"DOwnloaded from {serverName}: {child.Name}");
+                            LoggerSingleton.SynchronizedLocalGroups.Debug($"DOwnloaded from {serverName}: {child.Name}");
                         }
                     }
                 }
@@ -78,7 +77,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
             catch (Exception ex)
             {
-                LoggerGeneral.Fatal($"{ex.ToString()} Error getting all local groups on gateway: '{serverName}'.");
+                LoggerSingleton.General.Fatal($"{ex.ToString()} Error getting all local groups on gateway: '{serverName}'.");
             }
 
             return localGroups;
@@ -91,7 +90,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 if (string.IsNullOrEmpty(groupName))
                 {
-                    LoggerSynchronizedLocalGroups.Error("Group name not specified.");
+                    LoggerSingleton.SynchronizedLocalGroups.Error("Group name not specified.");
                     throw new Exception("Group name not specified.");
                 }
                     
@@ -104,7 +103,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                         string memberName = GetGroupMember(member, memberType);
                         if (memberName != null)
                         {
-                            LoggerSynchronizedLocalGroups.Debug($"Downloaded member: {memberName} from LG: {groupName} from server: {serverName}");
+                            LoggerSingleton.SynchronizedLocalGroups.Debug($"Downloaded member: {memberName} from LG: {groupName} from server: {serverName}");
                             downloadedMembers.Add(memberName);
                         }
                     }
@@ -113,7 +112,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             catch (Exception ex)
             {
-                LoggerGeneral.Fatal($"{ex.ToString()} Error while getting members of group: '{groupName}' from gateway: '{serverName}'");
+                LoggerSingleton.General.Fatal($"{ex.ToString()} Error while getting members of group: '{groupName}' from gateway: '{serverName}'");
             }
 
             return downloadedMembers;
@@ -163,10 +162,10 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         public List<string> SyncLocalGroups(LocalGroupsChanges changedLocalGroups, string serverName)
         {
-            LoggerGeneral.Info(serverName, $"There are {changedLocalGroups.LocalGroupsToAdd.Count + changedLocalGroups.LocalGroupsToDelete.Count + changedLocalGroups.LocalGroupsToUpdate.Count} groups to synchronize.");
-            LoggerGeneral.Info(serverName, $"There are {changedLocalGroups.LocalGroupsToAdd.Count } groups to add to server {serverName}.");
-            LoggerGeneral.Info(serverName, $"There are {changedLocalGroups.LocalGroupsToDelete.Count } groups to delete from server {serverName}.");
-            LoggerGeneral.Info(serverName, $"There are {changedLocalGroups.LocalGroupsToUpdate.Count } groups to be updated by editing members/devices on server {serverName}.");
+            LoggerSingleton.General.Info(serverName, $"There are {changedLocalGroups.LocalGroupsToAdd.Count + changedLocalGroups.LocalGroupsToDelete.Count + changedLocalGroups.LocalGroupsToUpdate.Count} groups to synchronize.");
+            LoggerSingleton.General.Info(serverName, $"There are {changedLocalGroups.LocalGroupsToAdd.Count } groups to add to server {serverName}.");
+            LoggerSingleton.General.Info(serverName, $"There are {changedLocalGroups.LocalGroupsToDelete.Count } groups to delete from server {serverName}.");
+            LoggerSingleton.General.Info(serverName, $"There are {changedLocalGroups.LocalGroupsToUpdate.Count } groups to be updated by editing members/devices on server {serverName}.");
             var groupsToDelete = changedLocalGroups.LocalGroupsToDelete; // ovo bukv imamo u filteringu, suvisno
             var groupsToAdd = changedLocalGroups.LocalGroupsToAdd;
             var modifiedGroups = changedLocalGroups.LocalGroupsToUpdate;
@@ -181,20 +180,20 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         private void DeleteGroups(string serverName, List<LocalGroup> groupsToDelete)
         {
-            LoggerGeneral.Info($"Started deleting {groupsToDelete.Count} groups on gateway '{serverName}'.");
+            LoggerSingleton.General.Info($"Started deleting {groupsToDelete.Count} groups on gateway '{serverName}'.");
             //_reporter.Info(serverName, $"Deleting {groupsToDelete.Count} groups.");
             groupsToDelete.ForEach(lg => DeleteGroup(serverName, lg.Name)); // delete each group with '-' in the name
-            LoggerGeneral.Info(serverName, "Finished deleting groups.");
+            LoggerSingleton.General.Info(serverName, "Finished deleting groups.");
         }
 
         private void DeleteGroup(string server, string localGroup)
         {
-            LoggerSynchronizedLocalGroups.Info(server, $"Removing group '{localGroup}'.");
+            LoggerSingleton.SynchronizedLocalGroups.Info(server, $"Removing group '{localGroup}'.");
 
             if (DeleteGroup2(localGroup, server))
-                LoggerSynchronizedLocalGroups.Info($"Local Group successfully deleted {localGroup} on server {server}");
+                LoggerSingleton.SynchronizedLocalGroups.Info($"Local Group successfully deleted {localGroup} on server {server}");
             else
-                LoggerSynchronizedLocalGroups.Error($"Local Group unsuccessfully deleted {localGroup} on server {server}");
+                LoggerSingleton.SynchronizedLocalGroups.Error($"Local Group unsuccessfully deleted {localGroup} on server {server}");
         }
         public bool DeleteGroup2(string groupName, string server)
         {
@@ -204,7 +203,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             bool groupExists = false;
             DirectoryEntry newGroup = null;
 
-            LoggerSynchronizedLocalGroups.Info($"Removing group '{groupName}' from gateway '{server}'.");
+            LoggerSingleton.SynchronizedLocalGroups.Info($"Removing group '{groupName}' from gateway '{server}'.");
             try
             {
                 var ad = new DirectoryEntry($"WinNT://{server},computer", username, password);
@@ -235,7 +234,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             catch (Exception ex)
             {
                 success = false;
-                LoggerSynchronizedLocalGroups.Error(ex, $"Error while deleting group: '{groupName}' from gateway: '{server}'.");
+                LoggerSingleton.SynchronizedLocalGroups.Error(ex, $"Error while deleting group: '{groupName}' from gateway: '{server}'.");
             }
 
             return success;
@@ -243,16 +242,16 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         private List<string> AddNewGroups(string serverName, ICollection<LocalGroup> groupsToAdd)
         {
-            LoggerGeneral.Info($"Adding {groupsToAdd.Count} new groups to the gateway '{serverName}'.");
+            LoggerSingleton.General.Info($"Adding {groupsToAdd.Count} new groups to the gateway '{serverName}'.");
             var addedGroups = new List<string>();
             foreach (var lg in groupsToAdd)
             {
-                LoggerSynchronizedLocalGroups.Info(serverName, $"Adding group '{lg.Name}'.");
+                LoggerSingleton.SynchronizedLocalGroups.Info(serverName, $"Adding group '{lg.Name}'.");
                 if (AddNewGroupWithContent(serverName, lg))
                     addedGroups.Add(lg.Name);
             }
-            LoggerGeneral.Info(serverName, $"Finished adding {addedGroups.Count} new groups.");
-            LoggerSynchronizedLocalGroups.Info(serverName, $"Finished adding {addedGroups.Count} new groups.");
+            LoggerSingleton.General.Info(serverName, $"Finished adding {addedGroups.Count} new groups.");
+            LoggerSingleton.SynchronizedLocalGroups.Info(serverName, $"Finished adding {addedGroups.Count} new groups.");
             return addedGroups;
         }
 
@@ -260,7 +259,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             //string groupName = FormatModifiedValue(lg.Name);
             var success = true;
-            LoggerSynchronizedLocalGroups.Info($"Adding empty group {lg.Name}");
+            LoggerSingleton.SynchronizedLocalGroups.Info($"Adding empty group {lg.Name}");
             var newGroup = AddEmptyGroup(lg.Name, server);
             if (newGroup is not null)
             {
@@ -273,7 +272,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             else
             {
                 success = false;
-                LoggerSynchronizedLocalGroups.Error(server, $"Failed adding new group: '{lg.Name}' and its contents.");
+                LoggerSingleton.SynchronizedLocalGroups.Error(server, $"Failed adding new group: '{lg.Name}' and its contents.");
             }
             newGroup.CommitChanges();
             //if (success) _reporter.IncrementAddedGroups(server);
@@ -288,7 +287,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             string password = "7KJuswxQnLXwWM3znp";
             bool groupExists = false;
 
-            LoggerSynchronizedLocalGroups.Debug($"Adding new group: '{groupName}' on gateway: '{server}'.");
+            LoggerSingleton.SynchronizedLocalGroups.Debug($"Adding new group: '{groupName}' on gateway: '{server}'.");
             try
             {
                 var ad = new DirectoryEntry($"WinNT://{server},computer", username, password);
@@ -301,12 +300,12 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 {
                     if (ex.ErrorCode == -2147022675 || ex.ErrorCode == -2147022676) // Group not found.
                     {
-                        LoggerSynchronizedLocalGroups.Debug($"Group already exists: '{groupName}' on gateway: '{server}'.");
+                        LoggerSingleton.SynchronizedLocalGroups.Debug($"Group already exists: '{groupName}' on gateway: '{server}'.");
                         groupExists = false;
                     }
                     else
                     {
-                        LoggerSynchronizedLocalGroups.Warn($"Different exception message than Already existing group: '{groupName}' on gateway: '{server}'.");
+                        LoggerSingleton.SynchronizedLocalGroups.Warn($"Different exception message than Already existing group: '{groupName}' on gateway: '{server}'.");
                         groupExists = false;
                     }
                 }
@@ -318,7 +317,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             catch (Exception ex)
             {
-                LoggerSynchronizedLocalGroups.Error(ex, $"Error adding empty group: '{groupName}' on gateway: '{server}'.");
+                LoggerSingleton.SynchronizedLocalGroups.Error(ex, $"Error adding empty group: '{groupName}' on gateway: '{server}'.");
                 newGroup = null;
             }
 
@@ -340,28 +339,28 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     success = AddMember(server, lg.Name, member.Name, newGroup);
                 general_success = general_success && success;
             }
-            if (!general_success) LoggerSynchronizedLocalGroups.Error(server, $"Failed synchronizing members for group '{ lg.Name}'.");
+            if (!general_success) LoggerSingleton.SynchronizedLocalGroups.Error(server, $"Failed synchronizing members for group '{ lg.Name}'.");
             return general_success;
         }
 
         private bool DeleteMember(string server, string groupName, string memberName, DirectoryEntry newGroup)
         {
             if (RemoveMemberFromLocalGroup(memberName, groupName, server, newGroup)) return true;
-            LoggerSynchronizedLocalGroups.Error($"Failed removing member: '{memberName}' from group: '{groupName}' on gateway: '{server}'.");
+            LoggerSingleton.SynchronizedLocalGroups.Error($"Failed removing member: '{memberName}' from group: '{groupName}' on gateway: '{server}'.");
             return false;
         }
 
         private bool AddMember(string server, string groupName, string memberName, DirectoryEntry newGroup)
         {
             if (AddMemberToLocalGroup(memberName, groupName, server, newGroup)) return true;
-            LoggerSynchronizedLocalGroups.Error($"Failed adding new member: '{memberName}' to group: '{groupName}' on gateway: '{server}'.");
+            LoggerSingleton.SynchronizedLocalGroups.Error($"Failed adding new member: '{memberName}' to group: '{groupName}' on gateway: '{server}'.");
             return false;
         }
 
         public bool RemoveMemberFromLocalGroup(string memberName, string groupName, string serverName, DirectoryEntry groupEntry)
         {
             bool success;
-            LoggerSynchronizedLocalGroups.Info($"Removing member: '{memberName}' from group: '{groupName}' on gateway: '{serverName}'.");
+            LoggerSingleton.SynchronizedLocalGroups.Info($"Removing member: '{memberName}' from group: '{groupName}' on gateway: '{serverName}'.");
             try
             {
                 try
@@ -378,7 +377,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             catch (Exception ex)
             {
-                LoggerSynchronizedLocalGroups.Error(ex, $"Error while adding member '{memberName}' to group '{groupName}' on gateway '{serverName}'.");
+                LoggerSingleton.SynchronizedLocalGroups.Error(ex, $"Error while adding member '{memberName}' to group '{groupName}' on gateway '{serverName}'.");
                 success = false;
             }
 
@@ -390,7 +389,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             bool success;
             string username = "svcgtw";
             string password = "7KJuswxQnLXwWM3znp";
-            LoggerSynchronizedLocalGroups.Info($"Adding new member '{memberName}' to the group '{groupName}' on gateway '{serverName}'.");
+            LoggerSingleton.SynchronizedLocalGroups.Info($"Adding new member '{memberName}' to the group '{groupName}' on gateway '{serverName}'.");
             try
             {
                 try
@@ -400,7 +399,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 }
                 catch (System.Reflection.TargetInvocationException ex)
                 {
-                    LoggerSynchronizedLocalGroups.Warn($"Member already exists '{memberName}' to the group '{groupName}' on gateway '{serverName}'.");
+                    LoggerSingleton.SynchronizedLocalGroups.Warn($"Member already exists '{memberName}' to the group '{groupName}' on gateway '{serverName}'.");
                     Console.WriteLine(ex.Message);
                 }
                 success = true;
@@ -408,7 +407,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             catch (Exception ex)
             {
-                LoggerSynchronizedLocalGroups.Error(ex, $"Error while adding member '{memberName}' to group '{groupName}' on gateway '{serverName}'.");
+                LoggerSingleton.SynchronizedLocalGroups.Error(ex, $"Error while adding member '{memberName}' to group '{groupName}' on gateway '{serverName}'.");
                 success = false;
             }
 
@@ -418,21 +417,21 @@ namespace RemoteDesktopCleaner.BackgroundServices
         private bool DeleteComputer(string server, string groupName, string computerName, DirectoryEntry newGroup)
         {
             if (RemoveComputerFromLocalGroup(computerName, groupName, server, newGroup)) return true;
-            LoggerSynchronizedLocalGroups.Error($"Failed removing computer: '{computerName}' from group: '{groupName}' on gateway: '{server}'.");
+            LoggerSingleton.SynchronizedLocalGroups.Error($"Failed removing computer: '{computerName}' from group: '{groupName}' on gateway: '{server}'.");
             return false;
         }
 
         private bool AddComputer(string server, string groupName, string computerName, DirectoryEntry newGroup)
         {
             if (AddComputerToLocalGroup(computerName, groupName, server, newGroup)) return true;
-            LoggerSynchronizedLocalGroups.Error($"Failed adding new computer: '{computerName}' to group: '{groupName}' on gateway: '{server}'.");
+            LoggerSingleton.SynchronizedLocalGroups.Error($"Failed adding new computer: '{computerName}' to group: '{groupName}' on gateway: '{server}'.");
             return false;
         }
 
         public bool AddComputerToLocalGroup(string computerName, string groupName, string serverName, DirectoryEntry groupEntry)
         {
             bool success;
-            LoggerSynchronizedLocalGroups.Info($"Adding new computer '{computerName}' to the group '{groupName}' on gateway '{serverName}'.");
+            LoggerSingleton.SynchronizedLocalGroups.Info($"Adding new computer '{computerName}' to the group '{groupName}' on gateway '{serverName}'.");
             try
             {
                 try
@@ -449,7 +448,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             catch (Exception ex)
             {
-                LoggerSynchronizedLocalGroups.Error(ex, $"Error while adding member '{computerName}' to group '{groupName}' on gateway '{serverName}'.");
+                LoggerSingleton.SynchronizedLocalGroups.Error(ex, $"Error while adding member '{computerName}' to group '{groupName}' on gateway '{serverName}'.");
                 success = false;
             }
 
@@ -461,7 +460,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             var success = true;
             string username = "svcgtw";
             string password = "7KJuswxQnLXwWM3znp";
-            LoggerSynchronizedLocalGroups.Info($"Deleting computer '{computerName}' from the group '{groupName}' on gateway '{serverName}'.");
+            LoggerSingleton.SynchronizedLocalGroups.Info($"Deleting computer '{computerName}' from the group '{groupName}' on gateway '{serverName}'.");
             try
             {
                 try
@@ -478,7 +477,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             catch (Exception ex)
             {
-                LoggerSynchronizedLocalGroups.Error(ex, $"Error while adding member '{computerName}' to group '{groupName}' on gateway '{serverName}'.");
+                LoggerSingleton.SynchronizedLocalGroups.Error(ex, $"Error while adding member '{computerName}' to group '{groupName}' on gateway '{serverName}'.");
                 success = false;
             }
 
@@ -499,18 +498,18 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     success = success && AddComputer(server, lg.Name, computer.Name, newGroup);
                 generalSuccess = generalSuccess && success;
             }
-            if (!generalSuccess) LoggerSynchronizedLocalGroups.Error(server, $"Failed synchronizing computers for group: '{lg.Name}'.");
+            if (!generalSuccess) LoggerSingleton.SynchronizedLocalGroups.Error(server, $"Failed synchronizing computers for group: '{lg.Name}'.");
             return generalSuccess;
         }
         private void SyncModifiedGroups(string serverName, List<LocalGroup> modifiedGroups)
         {
-            LoggerGeneral.Info(serverName, $"Synchronizing content of {modifiedGroups.Count} groups.");
+            LoggerSingleton.General.Info(serverName, $"Synchronizing content of {modifiedGroups.Count} groups.");
             modifiedGroups.ForEach(lg => SyncGroupContent(lg, serverName));
         }
 
         private void SyncGroupContent(LocalGroup lg, string server)
         {
-            LoggerSynchronizedLocalGroups.Info(server, $"Synchronizing {lg.Name}.");
+            LoggerSingleton.SynchronizedLocalGroups.Info(server, $"Synchronizing {lg.Name}.");
             var success = true;
             var localGroup = GetLocalGroup(server, lg.Name);
             if (CleanFromOrphanedSids(localGroup, lg, server)) // ovo popraviti jer nesto nije ok
@@ -523,7 +522,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             else
             {
-                LoggerSynchronizedLocalGroups.Error($"Error while cleaning group: '{lg.Name}' from orphaned SIDs, further synchronization on this group is skipped.");
+                LoggerSingleton.SynchronizedLocalGroups.Error($"Error while cleaning group: '{lg.Name}' from orphaned SIDs, further synchronization on this group is skipped.");
                 //_reporter.Error(server, $"Failed cleaning group '{lg.Name}' from orphaned SIDs.");
                 success = false;
             }
@@ -555,7 +554,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
             catch (Exception ex)
             {
-                LoggerSynchronizedLocalGroups.Error(ex, $"Error while removing orphaned SIDs from group: '{lg.Name}' on gateway: '{serverName}'.");
+                LoggerSingleton.SynchronizedLocalGroups.Error(ex, $"Error while removing orphaned SIDs from group: '{lg.Name}' on gateway: '{serverName}'.");
                 return false;
             }
         }
@@ -571,12 +570,12 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 if (!member.Name.StartsWith(Constants.OrphanedSid)) continue;
                 try
                 {
-                    LoggerSynchronizedLocalGroups.Info($"Removing SID: '{member.Name}'.");
+                    LoggerSingleton.SynchronizedLocalGroups.Info($"Removing SID: '{member.Name}'.");
                     groupPrincipal.Invoke("Remove", $"WinNT://{member.Name}");
                 }
                 catch (Exception ex)
                 {
-                    LoggerSynchronizedLocalGroups.Error(ex, $"Failed removing SID: '{member.Name}'.");
+                    LoggerSingleton.SynchronizedLocalGroups.Error(ex, $"Failed removing SID: '{member.Name}'.");
                     success = false;
                 }
 

@@ -1,13 +1,12 @@
 ﻿using System.Configuration;
 using NLog;
+using RemoteDesktopCleaner.Loggers;
 
 
 namespace RemoteDesktopCleaner
 {
     public static class AppConfig
     {
-        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
-
         public static List<string> GetGatewaysInUse()
         {
             try
@@ -16,7 +15,7 @@ namespace RemoteDesktopCleaner
             }
             catch (Exception ex)
             {
-                Logger.Error(ex, $"Failed getting gateways machines in use from config file.");
+                LoggerSingleton.General.Error(ex, $"Failed getting gateways machines in use from config file.");
                 return new List<string>();
             }
         }
