@@ -1,5 +1,4 @@
-﻿using NLog;
-using System.Text.Json;
+﻿using System.Text.Json;
 using RemoteDesktopCleaner.Data;
 using RemoteDesktopCleaner.Loggers;
 
@@ -22,34 +21,38 @@ namespace RemoteDesktopCleaner.BackgroundServices
             try
             {
                 LoggerSingleton.General.Info($"Starting the synchronization of '{serverName}' gateway.");
+                LoggerSingleton.General.Info($"Awaiting getting gateway RAP/Policy names for '{serverName}'.");
                 var taskGtRapNames = _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(serverName);
+                LoggerSingleton.General.Info($"Awaiting getting gateway Local Group names for '{serverName}'.");
                 if (_gatewayLocalGroupSynchronizer.DownloadGatewayConfig(serverName))
                 {
                     var cfgDiscrepancy = GetConfigDiscrepancy(serverName);
                     var changedLocalGroups = FilterChangedLocalGroups(cfgDiscrepancy.LocalGroups); 
 
                     var addedGroups = _gatewayLocalGroupSynchronizer.SyncLocalGroups(changedLocalGroups, serverName); 
-                    var allGatewayGroups = GetAllGatewayGroupsAfterSynchronization(cfgDiscrepancy, addedGroups);
-                    LoggerSingleton.General.Info($"Awaiting getting gateway RAP names for '{serverName}'.");
+                    var allGatewayGroups = GetAllGatewayGroupsAfterSynchronization(changedLocalGroups);
+
                     LoggerSingleton.General.Info($"Finished getting gateway RAP names for '{serverName}'.");
-                    _gatewayRapSynchronizer.SynchronizeRaps(serverName, allGatewayGroups, taskGtRapNames); 
+
+                    _gatewayRapSynchronizer.SynchronizeRaps(serverName, allGatewayGroups, changedLocalGroups.LocalGroupsToDelete.Where(lg => lg.Name.StartsWith("LG-")).Select(lg => lg.Name).ToList(), taskGtRapNames); 
                 }
                 LoggerSingleton.General.Info("Finished synchronization");
             }
             catch (Exception ex)
             {
                 LoggerSingleton.General.Error(ex, $"Error while synchronizing gateway: '{serverName}'.");
-                //_reporter.Finish(serverName);
             }
             Console.WriteLine($"Finished synchronization for gateway '{serverName}'.");
+            LoggerSingleton.General.Info($"Finished synchronization for gateway '{serverName}'.");
         }
 
         private GatewayConfig GetConfigDiscrepancy(string serverName)
         {
             LoggerSingleton.General.Info("Started comparing Local Groups and members from database and server");
-            GatewayConfig modelCfg = ReadValidConfigDbModel();
+            GatewayConfig modelCfgValid = ReadValidConfigDbModel();
+            GatewayConfig modelCfgInvalid = ReadInvalidConfigDbModel();
             GatewayConfig gatewayCfg = ReadGatewayConfigFromFile(serverName);
-            return CompareWithModel(gatewayCfg, modelCfg);
+            return CompareWithModel(gatewayCfg, modelCfgValid, modelCfgInvalid);
         }
 
         public GatewayConfig ReadGatewayConfigFromFile(string serverName)
@@ -67,10 +70,10 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 var localGroups = new List<LocalGroup>();
                 var dstDir = AppConfig.GetInfoDir();
                 var path = dstDir + @"\" + serverName + ".json";
-                var content = File.ReadAllText(path); // ucitamo iz jsona koji smo napravili, ucitamo LG-ove sa CERNGT01
+                var content = File.ReadAllText(path);
                 LoggerSingleton.SynchronizedLocalGroups.Debug($"Reading local groups for '{serverName}' from file.");
                 LoggerSingleton.General.Debug($"Reading local groups for '{serverName}' from file.");
-                localGroups.AddRange(Newtonsoft.Json.JsonConvert.DeserializeObject<List<LocalGroup>>(content)); // deserialize mora kad se cita iz jsona
+                localGroups.AddRange(Newtonsoft.Json.JsonConvert.DeserializeObject<List<LocalGroup>>(content));
                 return localGroups;
             }
             catch (Exception ex)
@@ -99,49 +102,86 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return gatewayModel;
         }
 
-        public GatewayConfig CompareWithModel(GatewayConfig gatewayCfg, GatewayConfig modelCfg)
+        public GatewayConfig ReadInvalidConfigDbModel()
+        {
+            LoggerSingleton.General.Info("Getting valid config model.");
+            var raps = GetRaps();
+            var localGroups = new List<LocalGroup>();
+            var validRaps = raps.Where(IsRapInvalid);
+            foreach (var rap in validRaps)
+            {
+                var owner = rap.login;
+                var resources = rap.rap_resource.Where(IsResourceInvalid)
+                    .Select(resource => $"{resource.resourceName}$").ToList();
+                resources.Add(owner);
+                var lg = new LocalGroup(rap.resourceGroupName, resources);
+                localGroups.Add(lg);
+            }
+            var gatewayModel = new GatewayConfig("MODEL", localGroups);
+            return gatewayModel;
+        }
+
+        public GatewayConfig CompareWithModel(GatewayConfig gatewayCfg, GatewayConfig modelCfgValid, GatewayConfig modelCfgInvalid)
         {
             LoggerSingleton.General.Debug($"Comparing gateway '{gatewayCfg.ServerName}' config to DB model.");
-            //_reporter.Info(gatewayCfg.ServerName, $"Comparing gateway '{gatewayCfg.ServerName}' config to DB model.");
-            var diff = new GatewayConfig(gatewayCfg.ServerName); // napravimo novi objekat LG koji ce da nosi razliku izmedju MODEL-a i CERNGT01
-            var modelLgs = modelCfg.LocalGroups; // izvuci lokalne grupe iz objekta
-            diff.Add(CheckExistingAndObsoleteGroups(modelCfg, gatewayCfg)); // nasli smo LG koje se razlikuju izmedju MODEL-a i CERNGT01, CERNGT)! nam je cilj da bude isti kao MODEL. LG=(group name, computer name, member name), znaci ako MODEL ne sadrzi LG iz CERNGT01 brisi LG zajendo sa svim memberima i kompovima, ako sadrzi onda proveri da li treba da se doda ili brise komp ili member
-            diff.Add(CheckForNewGroups(modelLgs, gatewayCfg));
-            SaveToFile(diff); // sacuvaj razliku u json, ovo mi se ne svidja, nepotrebno
+            var diff = new GatewayConfig(gatewayCfg.ServerName);
+            var modelLgsValid = modelCfgValid.LocalGroups;
+            var modelLgsInvalid = modelCfgInvalid.LocalGroups;
+            diff.Add(CheckExistingAndObsoleteGroups(modelCfgInvalid, gatewayCfg));
+            diff.Add(CheckForNewGroups(modelLgsValid, gatewayCfg));
+            SaveToFile(diff);
             return diff;
         }
 
-        private List<LocalGroup> CheckExistingAndObsoleteGroups(GatewayConfig modelCfg, GatewayConfig gatewayCfg)
+        private List<LocalGroup> CheckExistingAndObsoleteGroups(GatewayConfig modelCfgInvalid, GatewayConfig gatewayCfg)
         {
             var results = new List<LocalGroup>();
-            foreach (var gtLocalGroup in gatewayCfg.LocalGroups)
+            foreach (var modelLocalGroup in modelCfgInvalid.LocalGroups)
             {
-                LoggerSingleton.SynchronizedLocalGroups.Info($"Checkf if {gtLocalGroup.Name} exists in DB");
+                LoggerSingleton.SynchronizedLocalGroups.Info($"Checkf if obsolete {modelLocalGroup.Name} exists in DB");
                 LocalGroup lgDiff;
-                if (IsInConfig(gtLocalGroup.Name, modelCfg))
+                if (IsInConfig(modelLocalGroup.Name, gatewayCfg))
                 {
-                    LoggerSingleton.SynchronizedLocalGroups.Debug($"{gtLocalGroup.Name} exists in DB, check members and devices");
-                    lgDiff = new LocalGroup(gtLocalGroup.Name, LocalGroupFlag.CheckForUpdate);
-                    var modelLocalGroup = modelCfg.LocalGroups.First(lg => lg.Name == gtLocalGroup.Name);
-                    //lgDiff.Computers.AddRange(GetListDiscrepancy(modelLocalGroup.Computers, gtLocalGroup.Computers));
-                    lgDiff.ComputersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Computers, gtLocalGroup.Computers));
-                    //lgDiff.Members.AddRange(GetListDiscrepancy(modelLocalGroup.Members, gtLocalGroup.Members));
-                    lgDiff.MembersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Members, gtLocalGroup.Members));
-                }
-                else
-                {
-                    //lgDiff = new LocalGroup($"-{gtLocalGroup.Name}");
-                    lgDiff = new LocalGroup(gtLocalGroup.Name, LocalGroupFlag.Delete);
-                    lgDiff.Computers.AddRange(gtLocalGroup.Computers);
-                    lgDiff.ComputersObj.AddRange(gtLocalGroup.Computers, Enumerable.Repeat(LocalGroupFlag.Delete, gtLocalGroup.Computers.Count).ToList());
-                    lgDiff.Members.AddRange(gtLocalGroup.Members);
-                    lgDiff.MembersObj.AddRange(gtLocalGroup.Members, Enumerable.Repeat(LocalGroupFlag.Delete, gtLocalGroup.Members.Count).ToList());
-                }
-                results.Add(lgDiff);
+                    lgDiff = new LocalGroup(modelLocalGroup.Name, LocalGroupFlag.Delete);
+                    lgDiff.Computers.AddRange(modelLocalGroup.Computers);
+                    lgDiff.ComputersObj.AddRange(modelLocalGroup.Computers, Enumerable.Repeat(LocalGroupFlag.Delete, modelLocalGroup.Computers.Count).ToList());
+                    lgDiff.Members.AddRange(modelLocalGroup.Members);
+                    lgDiff.MembersObj.AddRange(modelLocalGroup.Members, Enumerable.Repeat(LocalGroupFlag.Delete, modelLocalGroup.Members.Count).ToList());
+                    results.Add(lgDiff);
+                }   
             }
-
             return results;
         }
+
+
+        //private List<LocalGroup> CheckExistingAndObsoleteGroups2(GatewayConfig modelCfg, GatewayConfig gatewayCfg)
+        //{
+        //    var results = new List<LocalGroup>();
+        //    foreach (var gtLocalGroup in gatewayCfg.LocalGroups)
+        //    {
+        //        LoggerSingleton.SynchronizedLocalGroups.Info($"Checkf if {gtLocalGroup.Name} exists in DB");
+        //        LocalGroup lgDiff;
+        //        if (IsInConfig(gtLocalGroup.Name, modelCfg))
+        //        {
+        //            LoggerSingleton.SynchronizedLocalGroups.Debug($"{gtLocalGroup.Name} exists in DB, check members and devices");
+        //            lgDiff = new LocalGroup(gtLocalGroup.Name, LocalGroupFlag.CheckForUpdate);
+        //            var modelLocalGroup = modelCfg.LocalGroups.First(lg => lg.Name == gtLocalGroup.Name);
+        //            lgDiff.ComputersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Computers, gtLocalGroup.Computers));
+        //            lgDiff.MembersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Members, gtLocalGroup.Members));
+        //        }
+        //        else
+        //        {
+        //            lgDiff = new LocalGroup(gtLocalGroup.Name, LocalGroupFlag.Delete);
+        //            lgDiff.Computers.AddRange(gtLocalGroup.Computers);
+        //            lgDiff.ComputersObj.AddRange(gtLocalGroup.Computers, Enumerable.Repeat(LocalGroupFlag.Delete, gtLocalGroup.Computers.Count).ToList());
+        //            lgDiff.Members.AddRange(gtLocalGroup.Members);
+        //            lgDiff.MembersObj.AddRange(gtLocalGroup.Members, Enumerable.Repeat(LocalGroupFlag.Delete, gtLocalGroup.Members.Count).ToList());
+        //        }
+        //        results.Add(lgDiff);
+        //    }
+
+        //    return results;
+        //}
 
         private List<LocalGroup> CheckForNewGroups(List<LocalGroup> modelGroups, GatewayConfig gatewayCfg)
         {
@@ -149,13 +189,9 @@ namespace RemoteDesktopCleaner.BackgroundServices
             foreach (var modelLocalGroup in modelGroups)
             {
                 if (IsInConfig(modelLocalGroup.Name, gatewayCfg)) continue;
-                //var lg = new LocalGroup($"+{modelLocalGroup.Name}");
                 var lg = new LocalGroup(modelLocalGroup.Name, LocalGroupFlag.Add);
                 lg.ComputersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Computers, new List<string>()));
                 lg.MembersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Members, new List<string>()));
-
-                //lg.Computers.AddRange(GetListDiscrepancy(modelLocalGroup.Computers, new List<string>()));
-                //lg.Members.AddRange(GetListDiscrepancy(modelLocalGroup.Members, new List<string>()));
                 result.Add(lg);
             }
 
@@ -204,22 +240,25 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         private LocalGroupsChanges FilterChangedLocalGroups(List<LocalGroup> allGroups)
         {
-            var groupsToDelete = allGroups.Where(lg => lg.Flag == LocalGroupFlag.Delete).ToList(); // LG to be deleted
+            var groupsToDelete = allGroups.Where(lg => lg.Flag == LocalGroupFlag.Delete).ToList();
             var groupsToAdd = allGroups.Where(lg => lg.Flag == LocalGroupFlag.Add).ToList();
-            var changedContent = allGroups.Where(lg => lg.Flag == LocalGroupFlag.CheckForUpdate && lg.MembersObj.Flags.Any(content => content != LocalGroupFlag.None)).ToList(); // LG whose computers or members will be added/deleted
+            var changedContent = allGroups.Where(lg => lg.Flag == LocalGroupFlag.CheckForUpdate && lg.MembersObj.Flags.Any(content => content != LocalGroupFlag.None)).ToList();
             var groupsToSync = new LocalGroupsChanges();
             groupsToSync.LocalGroupsToDelete = groupsToDelete;
             groupsToSync.LocalGroupsToAdd = groupsToAdd;
             groupsToSync.LocalGroupsToUpdate = changedContent;
-            //var groupsToSync = groupsToDelete.Concat(groupsToAdd).Concat(changedContent).ToList(); // concatenate it, suvisno
             return groupsToSync;
         }
 
-        private List<string> GetAllGatewayGroupsAfterSynchronization(GatewayConfig discrepancy, List<string> addedGroups)
+        private List<string> GetAllGatewayGroupsAfterSynchronization(LocalGroupsChanges discrepancy)
         {
-            var alreadyExistingGroups = discrepancy.LocalGroups
+            var alreadyExistingGroups = discrepancy.LocalGroupsToUpdate
                                                     .Where(lg => lg.Name.StartsWith("LG-"))
                                                     .Select(lg => lg.Name).ToList();
+            var addedGroups = discrepancy.LocalGroupsToAdd
+                                        .Where(lg => lg.Name.StartsWith("LG-"))
+                                        .Select(lg => lg.Name).ToList();
+
             return alreadyExistingGroups.Concat(addedGroups).ToList();
         }
 
@@ -250,6 +289,16 @@ namespace RemoteDesktopCleaner.BackgroundServices
         private bool IsResourceValid(rap_resource resource)
         {
             return !resource.toDelete && resource.invalid.HasValue && !resource.invalid.Value;
+        }
+
+        private bool IsRapInvalid(rap rap)
+        {
+            return rap.toDelete;
+        }
+
+        private bool IsResourceInvalid(rap_resource resource)
+        {
+            return resource.toDelete || !resource.invalid.HasValue || resource.invalid.Value;
         }
     }
 }

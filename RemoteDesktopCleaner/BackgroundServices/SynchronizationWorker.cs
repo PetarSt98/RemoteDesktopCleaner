@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.Hosting;
-using NLog;
 using RemoteDesktopCleaner.Exceptions;
 using System.Diagnostics;
 using RemoteDesktopCleaner.Loggers;
+using RemoteDesktopCleaner.Data;
 
 
 namespace RemoteDesktopCleaner.BackgroundServices
@@ -35,21 +35,26 @@ namespace RemoteDesktopCleaner.BackgroundServices
             //{
                 try
                 {
-                    //CloneSQL2MySQLdb();
+                //CloneSQL2MySQLdb();
 
-                    Console.WriteLine($"Starting weekly synchronization for the following gateways: {string.Join(",", gateways)}");
-                    if (_configValidator.MarkObsoleteData())
-                    {
-                        LoggerSingleton.General.Info("Successful marked obsolete data in RemoteDesktop MySQL database.");
-                        Console.WriteLine("Successful marked obsolete data in RemoteDesktop MySQL database.");
-                    }
-                    else
-                    {
-                        LoggerSingleton.General.Info("Failed marking obsolete data in RemoteDesktop MySQL database. Existing one will be used.");
-                        Console.WriteLine("Failed marking obsolete data in RemoteDesktop MySQL database. Existing one will be used.");
-                    }
+                Console.WriteLine($"Starting weekly synchronization for the following gateways: {string.Join(",", gateways)}");
+                if (_configValidator.MarkObsoleteData())
+                {
+                    LoggerSingleton.General.Info("Successful marked obsolete data in RemoteDesktop MySQL database.");
+                    Console.WriteLine("Successful marked obsolete data in RemoteDesktop MySQL database.");
+                }
+                else
+                {
+                    LoggerSingleton.General.Info("Failed marking obsolete data in RemoteDesktop MySQL database. Existing one will be used.");
+                    Console.WriteLine("Failed marking obsolete data in RemoteDesktop MySQL database. Existing one will be used.");
+                }
 
-                    _synchronizer.SynchronizeAsync("cerngt01");
+                _synchronizer.SynchronizeAsync("cerngt01");
+
+                using (var db = new RapContext())
+                {
+                    ConfigValidator.UpdateDatabase(db);
+                }
                     //break;
                 }
                 catch (OperationCanceledException)
@@ -82,8 +87,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             LoggerSingleton.General.Info("Started cloning RemoteDesktop database as MySQL database.");
             string scriptPath = $@"{Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName}\PowerShellScripts\database_copy_SQL2MySQL.ps1";
-
-            // Create a new ProcessStartInfo object with the necessary parameters
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
@@ -93,7 +96,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            // Start the process and read the output
+
             using Process process = new Process { StartInfo = startInfo };
             process.Start();
 

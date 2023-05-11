@@ -1,12 +1,13 @@
 ﻿using System.DirectoryServices;
 using System.Management;
-using NLog;
 using Microsoft.Management.Infrastructure;
 using Microsoft.Management.Infrastructure.Options;
 using System.Security;
 using System.Text.Json;
 using System.Text;
 using RemoteDesktopCleaner.Loggers;
+using RemoteDesktopCleaner.Caching;
+
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {
@@ -35,7 +36,11 @@ namespace RemoteDesktopCleaner.BackgroundServices
         }
         public List<string> GetRapNamesAsync(string serverName)
         {
-            return QueryGatewayRapNamesAsync(serverName);
+            bool cacheFlag = true;
+            if (cacheFlag)
+                return Cacher.LoadCacheFromFile();
+            else
+                return QueryGatewayRapNamesAsync(serverName);
         }
 
         private List<string> QueryGatewayRapNamesAsync(string serverName)
@@ -70,6 +75,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 }
                 LoggerSingleton.SynchronizedRaps.Info($"Finished querying RAP/Policy names from gateway '{serverName}'.");
 
+                Cacher.SaveCacheToFile(rapNames);
                 return rapNames;
             }
             catch (Exception ex)
@@ -81,13 +87,14 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return new List<string>();
         }
 
-        public void SynchronizeRaps(string serverName, List<string> allGatewayGroups, List<string> gatewayRaps)
+        public void SynchronizeRaps(string serverName, List<string> allGatewayGroups, List<string> toDeleteGatweayGroups, List<string> gatewayRaps)
         {
             LoggerSingleton.General.Info($"Starting Policy synchronisation of server: '{serverName}'.");
             LoggerSingleton.SynchronizedRaps.Info($"Starting Policy synchronisation of server: '{serverName}'.");
-            var modelRapNames = allGatewayGroups.Select(LgNameToRapName).ToList();
-            DeleteObsoleteRaps(serverName, modelRapNames, gatewayRaps);
-            AddMissingRaps(serverName, modelRapNames, gatewayRaps);
+            var modelRapNamesAdd = allGatewayGroups.Select(LgNameToRapName).ToList();
+            var modelRapNamesDelete = toDeleteGatweayGroups.Select(LgNameToRapName).ToList();
+            AddMissingRaps(serverName, modelRapNamesAdd, gatewayRaps);
+            DeleteObsoleteRaps(serverName, modelRapNamesDelete, gatewayRaps);
             LoggerSingleton.General.Info($"Finished Policy synchronisation of server: '{serverName}'.");
             LoggerSingleton.SynchronizedRaps.Info($"Finished Policy synchronisation of server: '{serverName}'.");
         }
@@ -97,7 +104,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
         }
         private void DeleteObsoleteRaps(string serverName, List<string> modelRapNames, List<string> gatewayRaps)
         {
-            var obsoleteRapNames = gatewayRaps.Except(modelRapNames).ToList();
+            var obsoleteRapNames = gatewayRaps.Intersect(modelRapNames).ToList();
             //_reporter.SetShouldDeleteRaps(serverName, obsoleteRapNames.Count);
             LoggerSingleton.General.Info($"Server:{serverName} Deleting {obsoleteRapNames.Count} RAPs from the gateway.");
             LoggerSingleton.SynchronizedRaps.Info($"Deleting {obsoleteRapNames.Count} RAPs from the gateway '{serverName}'.");
@@ -202,8 +209,10 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     }
                     else
                     {
-                        //    _reporter.Warn(serverName, $"Failed adding new RAP '{rapName}'. Error code: '{(uint)outParameters["ReturnValue"]}'.");
-                        LoggerSingleton.SynchronizedRaps.Error($"Error creating RAP: '{rapName}'. Reason: {(uint)outParameters["ReturnValue"]}.");
+                        if ((uint)outParameters["ReturnValue"] == 2147749913)
+                            LoggerSingleton.SynchronizedRaps.Warn($"Error creating RAP: '{rapName}'. Reason: Already exists.");
+                        else
+                            LoggerSingleton.SynchronizedRaps.Error($"Error creating RAP: '{rapName}'. Reason: {(uint)outParameters["ReturnValue"]}.");
                     }
                 }
                 return true;
@@ -233,16 +242,18 @@ namespace RemoteDesktopCleaner.BackgroundServices
             try
             {
                 string where = CreateWhereClause(rapNamesToDelete);
-                string osQuery =
-                    "SELECT * FROM Win32_TSGatewayResourceAuthorizationPolicy " + where;
+                //string osQuery =
+                //    "SELECT * FROM Win32_TSGatewayResourceAuthorizationPolicy " + where;
+                string osQuery = "SELECT * FROM Win32_TSGatewayResourceAuthorizationPolicy";
+
                 CimCredential Credentials = new CimCredential(PasswordAuthenticationMechanism.Default, "cern.ch", username, securepassword);
 
                 WSManSessionOptions SessionOptions = new WSManSessionOptions();
                 SessionOptions.AddDestinationCredentials(Credentials);
                 CimSession mySession = CimSession.Create(serverName, SessionOptions);
                 IEnumerable<CimInstance> queryInstance = mySession.QueryInstances(_oldGatewayServerHost + NamespacePath, "WQL", osQuery);
-
-                foreach (CimInstance rapInstance in queryInstance)
+                IEnumerable<CimInstance> filteredInstances = queryInstance.Where(instance => rapNamesToDelete.Contains(instance.CimInstanceProperties["Name"].Value.ToString()));
+                foreach (CimInstance rapInstance in filteredInstances)
                 {
                     var rapName = rapInstance.CimInstanceProperties["Name"].Value.ToString();
                     if (!rapNamesToDelete.Contains(rapName)) continue;
@@ -283,6 +294,18 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 {
                     rapDeletion.Deleted = true;
                     LoggerSingleton.SynchronizedRaps.Info($"Deleted RAP '{rapName}'.");
+                }
+            }
+            catch (CimException ex) // catch only CIM exceptions
+            {
+                if (ex.Message.Contains("NotFound")) // check if the error message contains "NotFound"
+                {
+                    LoggerSingleton.SynchronizedRaps.Warn($"Could not find RAP '{rapName}' to delete."); // log a warning
+                    rapDeletion.Deleted = false;
+                }
+                else // handle all other CIM exceptions
+                {
+                    LoggerSingleton.SynchronizedRaps.Error(ex, $"Error deleting RAP '{rapName}'.");
                 }
             }
             catch (Exception ex)

@@ -1,5 +1,4 @@
-﻿using NLog;
-using System.DirectoryServices;
+﻿using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
 using RemoteDesktopCleaner.Data;
 using System.Diagnostics;
@@ -20,7 +19,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
         private PrincipalSearchResult<Principal> members;
         private PrincipalContext domainContext;
 
-
         public ConfigValidator()
         {
             domainContext = new PrincipalContext(ContextType.Domain, DomainName);
@@ -39,6 +37,18 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
         }
 
+        #region Mark obsolete data in database
+        private void IsEGroupInActiveDirectory(PrincipalContext domainContext, string groupName)
+        {
+            var primaryAccountsGroupPrincipal = new GroupPrincipal(domainContext, groupName);
+            if (primaryAccountsGroupPrincipal == null)
+            {
+                var errorMessage = $"(10) E-Group '{groupName}' not found in Active Directory.";
+                LoggerSingleton.Raps.Warn(errorMessage);
+                throw (new ValidatorException(errorMessage));
+            }
+        }
+
         public bool MarkObsoleteData()
         {
             LoggerSingleton.General.Info("Started validation of  DB RAPs and corresponding Resources.");
@@ -47,7 +57,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             try
             {
                 using (var db = new RapContext())
-                { 
+                {
                     raps.AddRange(GetRaps(db));
                     LoggerSingleton.General.Info($"Queried {raps.Count} RAPs from DB. Starting validation.");
                     var i = 1;
@@ -57,7 +67,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     }
                     foreach (var rapRow in raps)
                     {
-                        if (i > 200) break;
+                        //if (i > 100) break;
                         LoggerSingleton.Raps.Debug($"{i} - Rap login to be processed {rapRow.login}");
                         Console.Write($"\r{i}/{raps.Count} - {100 * i / raps.Count}% ");
                         i++;
@@ -89,7 +99,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     LoggerSingleton.General.Info("Finished validation of  DB RAPs and corresponding Resources.");
                     Console.WriteLine("Finished validation of  DB RAPs and corresponding Resources.");
 
-                    UpdateDatabase(db);
+                    db.SaveChanges();
                     domainContext.Dispose();
                     return true;
                 }
@@ -100,34 +110,9 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 return false;
             }
         }
+        #endregion
 
-        private void UpdateDatabase(RapContext db)
-        {
-            var rapsToDelete = db.raps.Where(r => r.toDelete == true).ToList();
-            db.raps.RemoveRange(rapsToDelete);
-
-            var rapResourcesToDelete = db.rap_resource.Where(rr => rr.toDelete == true).ToList();
-            db.rap_resource.RemoveRange(rapResourcesToDelete);
-
-            db.SaveChanges();
-        }
-
-        private void IsEGroupInActiveDirectory(PrincipalContext domainContext, string groupName)
-        {
-            var primaryAccountsGroupPrincipal = new GroupPrincipal(domainContext, groupName);
-            if (primaryAccountsGroupPrincipal == null)
-            {
-                var errorMessage = $"(10) E-Group '{groupName}' not found in Active Directory.";
-                LoggerSingleton.Raps.Warn(errorMessage);
-                throw (new ValidatorException(errorMessage));
-            }
-        }
-
-        private bool HasNoValidResources(rap rapRow)
-        {
-            return rapRow.rap_resource.All(res => res.toDelete || !res.access || res.invalid.HasValue && res.invalid.Value);
-        }
-
+        #region Validate RAP_Resources
         private void ValidateRapResources(rap rapRow)
         {
             PolicyValidationResult policyValidationResult;
@@ -137,7 +122,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 LoggerSingleton.Raps.Debug($"Rap {rapRow.login} resource to be processed: owner{resource.resourceOwner}, name: {resource.resourceName}");
                 if (CheckResourceValidity(resource))
                 {
-                    policyValidationResult = ValidatePolicy(rapRow.login, resource.resourceOwner, resource.resourceName, resource); // resource
+                    policyValidationResult = ValidatePolicy(rapRow.login, resource.resourceOwner, resource.resourceName, resource);
                     
                 }
                 else
@@ -192,17 +177,8 @@ namespace RemoteDesktopCleaner.BackgroundServices
             if (accessibleResources == 0)
                 rap.enabled = false;
         }
-        private void MarkToDelete(rap_resource resource)
-        {
-            LoggerSingleton.Raps.Info($"Marking resource '{resource.resourceName}' of RAP '{resource.RAPName}' to delete.");
-            resource.toDelete = true;
-        }
-        private void DisableResource(rap_resource resource)
-        {
-            LoggerSingleton.Raps.Info($"Disabling resource '{resource.resourceName}' of RAP '{resource.RAPName}'.");
-            resource.access = false;
-            resource.synchronized = false;
-        }
+
+        #region Validate Policy
         private PolicyValidationResult ValidatePolicy(string login, string rapOwner, string computerName, rap_resource resource)
         {
             UserPrincipal rapOwnerPrincipal = null;
@@ -221,7 +197,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     if (IsPolicyAnException(rapOwner, login, computerName, resource))
                         return new PolicyValidationResult(true);
 
-                    Dictionary<string, string> deviceInfo = ExecutePowerShellScript(computerName, username, password);
+                    Dictionary<string, string> deviceInfo = ExecutePowerShellSOAPScript(computerName, username, password);
                     bool bNetworkOk = CheckDeviceDomainInterfaces(deviceInfo);
                     bool isNiceMember = IsUserNiceGroupMember(domainContext, rapOwnerPrincipal);
                     if (!isNiceMember)
@@ -239,7 +215,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
                             var msg =
                                 $"RAP owner '{rapOwner}' is not the responsible/user for the computer '{computerName}'.";
                             LoggerSingleton.Raps.Warn(msg);
-                            //messages.Append(msg);
                             break;
                         case true when bNetworkOk:
                             return new PolicyValidationResult(false, "Rap owner is responsible, network domain name allowed ");
@@ -281,6 +256,50 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return validationResult;
         }
 
+        private string RemoveDomainFromRapOwner(string rapOwner)
+        {
+            if (rapOwner.StartsWith(DomainName))
+            {
+                return rapOwner.Substring(DomainName.Length + 1);
+            }
+            else
+            {
+                return rapOwner;
+            }
+        }
+
+        private void ComputerExistsInActiveDirectory(string computerName)
+        {
+            var domainEntry = new DirectoryEntry("LDAP://cern.ch/DC=cern,DC=ch");
+            var domainSearcher = new DirectorySearcher(domainEntry);
+            domainSearcher.Filter = $"(&(cn={computerName})(objectClass=computer)(objectCategory=computer))";
+            domainSearcher.PropertiesToLoad.Add("cn"); // debug only
+            var computerResult = domainSearcher.FindOne();
+            if (computerResult == null)
+            {
+                LoggerSingleton.Raps.Warn($"Computer '{computerName}' not found in Active Directory.");
+                throw new ComputerNotFoundInActiveDirectoryException();
+            }
+        }
+
+        private bool IsPolicyAnException(string rapOwner, string userName, string computerName, rap_resource resource)
+        {
+            if (resource?.exception == null || !resource.exception.Value) return false;
+            var message = $"RAP owner '{rapOwner}' and computer '{computerName}' is an exception.";
+            LoggerSingleton.Raps.Warn(message);
+            return true;
+        }
+
+        private UserPrincipal GetRapOwnerFromActiveDirectory(PrincipalContext domainContext, string rapOwner)
+        {
+            var rapOwnerPrincipal = UserPrincipal.FindByIdentity(domainContext, rapOwner);
+            if (rapOwnerPrincipal != null) return rapOwnerPrincipal;
+
+            var errorMessage = $"RAP owner '{rapOwner}' not found in Active Directory.";
+            LoggerSingleton.Raps.Warn(errorMessage);
+            throw new ValidatorException(errorMessage);
+        }
+
         private bool IsRapOwnerResponsible(PrincipalContext domainContext, UserPrincipal rapOwnerPrincipal, Dictionary<string, string> deviceInfo)
         {
             return IsRapOwnerResponsibleGroupMember(domainContext, rapOwnerPrincipal, deviceInfo) || RapOwnerOrUserResponsible(rapOwnerPrincipal, deviceInfo);
@@ -307,19 +326,18 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         private bool CheckDeviceDomainInterfaces(Dictionary<string, string> DeviceInfo)
         {
-            // Check for computers domain interfaces. Only computers that have access to GPN or LCG domain are allowed to be managed.
             try
             {
                 if (DeviceInfo == null) throw new ArgumentNullException(nameof(DeviceInfo));
                 var oInterfaces = DeviceInfo["Interfaces"];
 
                 if (!string.IsNullOrEmpty(DeviceInfo["Interfaces"]))
-                { // dodati da bude lista
+                {
                     LoggerSingleton.Raps.Debug($"Checking interfaces in case of anomaly: {DeviceInfo["Interfaces"]}");
-                    if (IsNetworkDomainNameAllowed(DeviceInfo["NetworkDomainName"])) // checks if condition is fullfiled
+                    if (IsNetworkDomainNameAllowed(DeviceInfo["NetworkDomainName"]))
                         return true;
                 }
-                else // If interfaces is null, then computer belongs to the GPN domain
+                else
                     return true;
             }
             catch (Exception)
@@ -327,7 +345,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 var errorMessage = "Unable to connect to the LAN WebService, computer validation couldn't be done.";
                 LoggerSingleton.Raps.Error("Unable to connect to the LAN WebService, computer validation couldn't be done.");
                 throw new ValidatorException(errorMessage);
-                //return false;
             }
 
             return false;
@@ -335,22 +352,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         private bool IsUserNiceGroupMember(PrincipalContext domainContext, UserPrincipal rapOwnerPrincipal)
         {
-            //var niceLocalAdminGroupPrincipal = GroupPrincipal.FindByIdentity(domainContext, GlobalAdminGroup);
-            //if (niceLocalAdminGroupPrincipal != null)
-            //{
-            //    var members = niceLocalAdminGroupPrincipal.GetMembers(true);
-            //    if (members.Contains(rapOwnerPrincipal))
-            //        return true;
-            //}
-
             if (members != null)
             {
 
-                if (members.Contains(rapOwnerPrincipal)) // videti sto ovo ne radi
+                if (members.Contains(rapOwnerPrincipal))
                     return true;
             }
 
-            //Check if the RAP Owner is not member of Nice Group Manager and is not a primary account
             if (rapOwnerPrincipal.IsMemberOf(domainContext, IdentityType.SamAccountName, PrimaryAccountGroup))
             {
                 return false;
@@ -359,7 +367,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 $"Rap owner '{rapOwnerPrincipal.SamAccountName}' does not belong to primary accounts group.";
             LoggerSingleton.Raps.Warn(errorMessage);
             throw (new ValidatorException(errorMessage));
-            //return false;
         }
 
         private bool IsNetworkDomainNameAllowed(string NetworkDomainName)
@@ -368,13 +375,11 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return _allowedNetworkDomains.Contains(NetworkDomainName.ToUpper());
         }
 
-        static Dictionary<string, string> ExecutePowerShellScript(string computerName, string userName, string password)
+        static Dictionary<string, string> ExecutePowerShellSOAPScript(string computerName, string userName, string password)
         {
             try
             {
-                // Set the path to the script file
                 string scriptPath = $@"{Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName}\PowerShellScripts\SOAPNetworkService.ps1";
-                // Create a new ProcessStartInfo object with the necessary parameters
                 ProcessStartInfo startInfo = new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
@@ -385,7 +390,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     CreateNoWindow = true
                 };
 
-                // Start the process and read the output
                 using Process process = new Process { StartInfo = startInfo };
                 process.Start();
 
@@ -412,37 +416,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
         }
 
-        private bool IsPolicyAnException(string rapOwner, string userName, string computerName, rap_resource resource)
-        {
-            if (resource?.exception == null || !resource.exception.Value) return false;
-            var message = $"RAP owner '{rapOwner}' and computer '{computerName}' is an exception.";
-            LoggerSingleton.Raps.Warn(message);
-            return true;
-        }
-
-        private UserPrincipal GetRapOwnerFromActiveDirectory(PrincipalContext domainContext, string rapOwner)
-        {
-            var rapOwnerPrincipal = UserPrincipal.FindByIdentity(domainContext, rapOwner);
-            if (rapOwnerPrincipal != null) return rapOwnerPrincipal;
-
-            var errorMessage = $"RAP owner '{rapOwner}' not found in Active Directory.";
-            //return null;
-            LoggerSingleton.Raps.Warn(errorMessage);
-            throw new ValidatorException(errorMessage);
-        }
-
-        private string RemoveDomainFromRapOwner(string rapOwner)
-        {
-            if (rapOwner.StartsWith(DomainName))
-            {
-                return rapOwner.Substring(DomainName.Length + 1);
-            }
-            else
-            {
-                return rapOwner;
-            }
-        }
-
         public static Dictionary<string, string> ConvertStringToDictionary(string input)
         {
             Dictionary<string, string> result = new Dictionary<string, string>();
@@ -462,35 +435,11 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return result;
         }
 
-        private void ComputerExistsInActiveDirectory(string computerName)
-        {
-            var domainEntry = new DirectoryEntry("LDAP://cern.ch/DC=cern,DC=ch");
-            var domainSearcher = new DirectorySearcher(domainEntry);
-            domainSearcher.Filter = $"(&(cn={computerName})(objectClass=computer)(objectCategory=computer))";
-            domainSearcher.PropertiesToLoad.Add("cn"); // debug only
-            var computerResult = domainSearcher.FindOne();
-            if (computerResult == null)
-            {
-                LoggerSingleton.Raps.Warn($"Computer '{computerName}' not found in Active Directory.");
-                throw new ComputerNotFoundInActiveDirectoryException();
-            }
-        }
+        #endregion
 
-        private IEnumerable<rap> GetRaps(RapContext db)
-        {
-            var results = new List<rap>();
-            try
-            {
-                results.AddRange(db.raps.Include("rap_resource").ToList());
-            }
-            catch (Exception)
-            {
-                LoggerSingleton.General.Fatal("Failed query.");
-                Console.WriteLine("Failed query.");
-            }
-            return results;
-        }
+        #endregion
 
+        #region Validating RAPs
         private bool ValidateRap(string login)
         {
             return IsUserInActiveDirectory(login) || IsGroupInActiveDirectory(login);
@@ -530,12 +479,66 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 return false;
             }
         }
+        #endregion
 
+        #region Database operations
         private void MarkToDelete(rap rapRow)
         {
             LoggerSingleton.Raps.Info($"Marking rap '{rapRow.login}' to delete.");
             rapRow.toDelete = true;
         }
 
+        private bool HasNoValidResources(rap rapRow)
+        {
+            return rapRow.rap_resource.All(res => res.toDelete || !res.access || res.invalid.HasValue && res.invalid.Value);
+        }
+
+        private void MarkToDelete(rap_resource resource)
+        {
+            LoggerSingleton.Raps.Info($"Marking resource '{resource.resourceName}' of RAP '{resource.RAPName}' to delete.");
+            resource.toDelete = true;
+        }
+
+        private void DisableResource(rap_resource resource)
+        {
+            LoggerSingleton.Raps.Info($"Disabling resource '{resource.resourceName}' of RAP '{resource.RAPName}'.");
+            resource.access = false;
+            resource.synchronized = false;
+        }
+
+        private IEnumerable<rap> GetRaps(RapContext db)
+        {
+            var results = new List<rap>();
+            try
+            {
+                results.AddRange(db.raps.Include("rap_resource").ToList());
+            }
+            catch (Exception)
+            {
+                LoggerSingleton.General.Fatal("Failed query.");
+                Console.WriteLine("Failed query.");
+            }
+            return results;
+        }
+
+        static public void UpdateDatabase(RapContext db)
+        {
+            LoggerSingleton.General.Info("Saving changes into database (marked raps/rap_resources to be deleted)");
+            LoggerSingleton.Raps.Info("Saving changes into database (marked raps/rap_resources to be deleted)");
+
+            db.SaveChanges();
+
+            var rapsToDelete = db.raps.Where(r => r.toDelete == true).ToList();
+            db.raps.RemoveRange(rapsToDelete);
+
+            var rapResourcesToDelete = db.rap_resource.Where(rr => rr.toDelete == true).ToList();
+            db.rap_resource.RemoveRange(rapResourcesToDelete);
+
+            LoggerSingleton.General.Info("Deleting obsolete RAPs and RAP_Resources from MySQL database");
+            LoggerSingleton.Raps.Info("Deleting obsolete RAPs and RAP_Resources from MySQL database");
+
+            db.SaveChanges();
+        }
+        #endregion
     }
 }
