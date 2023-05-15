@@ -3,8 +3,7 @@ using RemoteDesktopCleaner.Exceptions;
 using System.Diagnostics;
 using SynchronizerLibrary.Loggers;
 using RemoteDesktopCleaner.Data;
-using SynchronizerLibrary.CommonServices;
-//using RemoteDesktopCleaner.BackgroundServices.Obsolete;
+
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {

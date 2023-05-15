@@ -3,7 +3,7 @@ using System.DirectoryServices.AccountManagement;
 using RemoteDesktopCleaner.Data;
 using System.Diagnostics;
 using RemoteDesktopCleaner.Exceptions;
-using RemoteDesktopCleaner.Loggers;
+using SynchronizerLibrary.Loggers;
 
 
 namespace RemoteDesktopCleaner.BackgroundServices

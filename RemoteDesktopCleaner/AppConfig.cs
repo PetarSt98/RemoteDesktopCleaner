@@ -1,6 +1,6 @@
 ﻿using System.Configuration;
 using NLog;
-using RemoteDesktopCleaner.Loggers;
+using SynchronizerLibrary.Loggers;
 
 
 namespace RemoteDesktopCleaner
