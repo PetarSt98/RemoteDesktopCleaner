@@ -1,20 +1,13 @@
 ﻿using Microsoft.Extensions.Hosting;
 using RemoteDesktopCleaner.Exceptions;
 using System.Diagnostics;
-using RemoteDesktopCleaner.Loggers;
+using SynchronizerLibrary.Loggers;
 using RemoteDesktopCleaner.Data;
-
+using SynchronizerLibrary.CommonServices;
+//using RemoteDesktopCleaner.BackgroundServices.Obsolete;
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {
-    public enum ObjectClass
-    {
-        User,
-        Group,
-        Computer,
-        All,
-        Sid
-    }
     public sealed class SynchronizationWorker : BackgroundService
     {
         private readonly IConfigValidator _configValidator;

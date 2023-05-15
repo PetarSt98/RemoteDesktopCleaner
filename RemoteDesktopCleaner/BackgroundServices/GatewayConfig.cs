@@ -1,7 +1,7 @@
 ﻿using System.Text.Json;
 
 
-namespace RemoteDesktopCleaner.BackgroundServices
+namespace RemoteDesktopCleaner.BackgroundServices.Obsolete
 {
     public class GatewayConfig
     {

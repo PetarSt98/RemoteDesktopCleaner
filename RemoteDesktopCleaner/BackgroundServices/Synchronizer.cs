@@ -1,6 +1,8 @@
 ﻿using System.Text.Json;
 using RemoteDesktopCleaner.Data;
 using RemoteDesktopCleaner.Loggers;
+using SynchronizerLibrary.CommonServices;
+//using RemoteDesktopCleaner.BackgroundServices.Obsolete;
 
 
 namespace RemoteDesktopCleaner.BackgroundServices
@@ -126,7 +128,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
             LoggerSingleton.General.Debug($"Comparing gateway '{gatewayCfg.ServerName}' config to DB model.");
             var diff = new GatewayConfig(gatewayCfg.ServerName);
             var modelLgsValid = modelCfgValid.LocalGroups;
-            var modelLgsInvalid = modelCfgInvalid.LocalGroups;
             diff.Add(CheckExistingAndObsoleteGroups(modelCfgInvalid, gatewayCfg));
             diff.Add(CheckForNewGroups(modelLgsValid, gatewayCfg));
             SaveToFile(diff);

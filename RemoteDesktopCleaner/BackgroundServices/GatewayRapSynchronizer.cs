@@ -9,7 +9,7 @@ using RemoteDesktopCleaner.Loggers;
 using RemoteDesktopCleaner.Caching;
 
 
-namespace RemoteDesktopCleaner.BackgroundServices
+namespace RemoteDesktopCleaner.BackgroundServices.Obsolete
 {
     public class GatewayRapSynchronizer : IGatewayRapSynchronizer
     {
@@ -36,7 +36,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
         }
         public List<string> GetRapNamesAsync(string serverName)
         {
-            bool cacheFlag = true;
+            bool cacheFlag = false;
             if (cacheFlag)
                 return Cacher.LoadCacheFromFile();
             else

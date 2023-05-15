@@ -1,11 +1,11 @@
 ﻿using System.DirectoryServices;
-using NLog;
 using System.Collections;
 using System.Text.Json;
 using RemoteDesktopCleaner.Loggers;
+using SynchronizerLibrary.CommonServices;
 
 
-namespace RemoteDesktopCleaner.BackgroundServices
+namespace RemoteDesktopCleaner.BackgroundServices.Obsolete
 {
     public class GatewayLocalGroupSynchronizer : IGatewayLocalGroupSynchronizer
     {

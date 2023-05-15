@@ -1,9 +1,10 @@
-﻿using NLog;
-using Unity;
+﻿using Unity;
 using RemoteDesktopCleaner.BackgroundServices;
 using Unity.Lifetime;
 using RemoteDesktopCleaner.Exceptions;
-using RemoteDesktopCleaner.Loggers;
+using SynchronizerLibrary.Loggers;
+using SynchronizerLibrary.CommonServices;
+//using RemoteDesktopCleaner.BackgroundServices.Obsolete;
 
 
 namespace RemoteDesktopCleaner

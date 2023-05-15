@@ -62,4 +62,8 @@
     <Folder Include="Connected Services\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\SynchronizerLibrary\SynchronizerLibrary.csproj" />
+  </ItemGroup>
+
 </Project>
