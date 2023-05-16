@@ -1,5 +1,5 @@
 ﻿using System.Text.Json;
-using RemoteDesktopCleaner.Data;
+using SynchronizerLibrary.Data;
 using SynchronizerLibrary.Loggers;
 using SynchronizerLibrary.CommonServices;
 

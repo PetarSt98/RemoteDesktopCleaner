@@ -1,6 +1,6 @@
 ﻿using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
-using RemoteDesktopCleaner.Data;
+using SynchronizerLibrary.Data;
 using System.Diagnostics;
 using RemoteDesktopCleaner.Exceptions;
 using SynchronizerLibrary.Loggers;

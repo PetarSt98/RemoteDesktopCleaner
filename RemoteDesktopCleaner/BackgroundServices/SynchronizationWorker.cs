@@ -2,7 +2,7 @@
 using RemoteDesktopCleaner.Exceptions;
 using System.Diagnostics;
 using SynchronizerLibrary.Loggers;
-using RemoteDesktopCleaner.Data;
+using SynchronizerLibrary.Data;
 
 
 namespace RemoteDesktopCleaner.BackgroundServices
