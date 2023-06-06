@@ -11,6 +11,9 @@ function Get-LanDbSet([string] $SetName,[String] $UserName,[String] $Password) {
                 $DeviceInfo | Add-Member -MemberType NoteProperty -Name NetworkDomainName -Value $DeviceInfo.Interfaces.NetworkDomainName
                 $DeviceInfo | Add-Member -MemberType NoteProperty -Name ResponsiblePersonName -Value $DeviceInfo.ResponsiblePerson.Name
                 $DeviceInfo | Add-Member -MemberType NoteProperty -Name ResponsiblePersonEmail -Value $DeviceInfo.ResponsiblePerson.Email
+
+                $OwnerInfo=Get-ADUser -Filter {mail -eq $DeviceInfo.ResponsiblePerson.Email}
+                $DeviceInfo | Add-Member -MemberType NoteProperty -Name ResponsiblePersonUsername -Value $OwnerInfo.Name
                 return $DeviceInfo
 }
 
