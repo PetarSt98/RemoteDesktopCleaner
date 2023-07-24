@@ -67,6 +67,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     }
                     foreach (var rapRow in raps)
                     {
+
                         //if (i > 100) break;
                         LoggerSingleton.Raps.Debug($"{i} - Rap login to be processed {rapRow.login}");
                         Console.Write($"\r{i}/{raps.Count} - {100 * i / raps.Count}% ");
@@ -197,13 +198,15 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     if (IsPolicyAnException(rapOwner, login, computerName, resource))
                         return new PolicyValidationResult(true);
 
-                    Dictionary<string, string> deviceInfo = ExecutePowerShellSOAPScript(computerName, username, password);
+                    Dictionary<string, string> deviceInfo = Task.Run(() => ExecutePowerShellSOAPScript(computerName, username, password)).Result;
+
                     bool bNetworkOk = CheckDeviceDomainInterfaces(deviceInfo);
                     bool isNiceMember = IsUserNiceGroupMember(domainContext, rapOwnerPrincipal);
                     if (!isNiceMember)
                     {
                         var msg = $"User Account '{login}' not found in the nice local administrator managers group.";
                         LoggerSingleton.Raps.Warn(msg);
+                        Console.WriteLine(msg);
                     }
                     else if (bNetworkOk)
                         return new PolicyValidationResult(false, "Good resource");
@@ -375,29 +378,33 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return _allowedNetworkDomains.Contains(NetworkDomainName.ToUpper());
         }
 
-        static Dictionary<string, string> ExecutePowerShellSOAPScript(string computerName, string userName, string password)
+        static async Task<Dictionary<string, string>> ExecutePowerShellSOAPScript(string computerName, string userName, string password)
         {
+            Console.WriteLine($"Calling SOAP Service: {computerName}");
+            LoggerSingleton.Raps.Debug($"Calling SOAP Service: {computerName}");
+            
             try
             {
-                string scriptPath = $@"{Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.FullName}\PowerShellScripts\SOAPNetworkService.ps1";
+                string pathToScript = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SOAPNetworkService.ps1");
+                Console.WriteLine($"-ExecutionPolicy Bypass -File \"{pathToScript}\" -SetName1 \"{computerName}\" -UserName1 \"{userName}\" -Password1 \"{password}\"");
                 ProcessStartInfo startInfo = new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
-                    Arguments = $"-ExecutionPolicy Bypass -File \"{scriptPath}\" -SetName1 \"{computerName}\" -UserName1 \"{userName}\" -Password1 \"{password}\"",
+                    Arguments = $"-ExecutionPolicy Bypass -File \"{pathToScript}\" -SetName1 \"{computerName}\" -UserName1 \"{userName}\" -Password1 \"{password}\"",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
-
                 using Process process = new Process { StartInfo = startInfo };
                 process.Start();
-
-                string output = process.StandardOutput.ReadToEnd();
-                string errors = process.StandardError.ReadToEnd();
-
+                Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+                Task<string> errorTask = process.StandardError.ReadToEndAsync();
+                string output = await outputTask;
+                string errors = await errorTask;
                 if (output.Length == 0 || errors.Length > 0) throw new ComputerNotFoundInActiveDirectoryException(errors);
-
+                Console.WriteLine($"Successful call of SOAP Service: {computerName}");
+                LoggerSingleton.Raps.Debug($"Successful call of SOAP Service: {computerName}");
                 Dictionary<string, string> result = ConvertStringToDictionary(output);
                 process.WaitForExit();
 
@@ -412,6 +419,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             catch (Exception ex)
             {
                 Console.WriteLine(ex.ToString());
+                LoggerSingleton.Raps.Error($"{ex.Message}");
                 return null;
             }
         }
@@ -533,6 +541,20 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
             var rapResourcesToDelete = db.rap_resource.Where(rr => rr.toDelete == true).ToList();
             db.rap_resource.RemoveRange(rapResourcesToDelete);
+
+            var rapsToSynchronize = db.raps.Where(r => r.synchronized == false).ToList();
+
+            var rapResourcesToSynchronize = db.rap_resource.Where(rr => rr.synchronized == false).ToList();
+
+            foreach (var rap in rapsToSynchronize)
+            {
+                rap.synchronized = true;
+            }
+
+            foreach (var rapResource in rapResourcesToSynchronize)
+            {
+                rapResource.synchronized = true;
+            }
 
             LoggerSingleton.General.Info("Deleting obsolete RAPs and RAP_Resources from MySQL database");
             LoggerSingleton.Raps.Info("Deleting obsolete RAPs and RAP_Resources from MySQL database");

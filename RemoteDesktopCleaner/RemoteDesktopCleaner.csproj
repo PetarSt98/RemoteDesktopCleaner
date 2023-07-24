@@ -7,8 +7,8 @@
     <Nullable>enable</Nullable>
     <TargetFrameworks></TargetFrameworks>
   </PropertyGroup>
-
-  <ItemGroup>
+	<ItemGroup>
+	<PackageReference Include="NETStandard.Library" Version="1.6.1" />
     <PackageReference Include="CliWrap" Version="3.6.1" />
     <PackageReference Include="EntityFramework" Version="6.4.4" />
     <PackageReference Include="Microsoft.AspNet.Cors" Version="5.2.9" />
@@ -57,7 +57,14 @@
     <PackageReference Include="Unity" Version="5.11.10" />
     <PackageReference Include="Unity.WebAPI" Version="5.4.0" />
   </ItemGroup>
-
+	<ItemGroup>
+      <None Update="SOAPNetworkService.ps1">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+    <ItemGroup>
+      <Content Include="ExternalLibraries\**\*.dll" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
   <ItemGroup>
     <Folder Include="Connected Services\" />
   </ItemGroup>

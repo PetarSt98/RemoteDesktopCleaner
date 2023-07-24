@@ -28,7 +28,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 LoggerSingleton.General.Info($"Awaiting getting gateway Local Group names for '{serverName}'.");
                 if (_gatewayLocalGroupSynchronizer.DownloadGatewayConfig(serverName))
                 {
-                    var cfgDiscrepancy = GetConfigDiscrepancy(serverName);
+                    var cfgDiscrepancy = GetConfigDiscrepancy(serverName); // fali update
                     var changedLocalGroups = FilterChangedLocalGroups(cfgDiscrepancy.LocalGroups); 
 
                     var addedGroups = _gatewayLocalGroupSynchronizer.SyncLocalGroups(changedLocalGroups, serverName); 
@@ -130,6 +130,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             var modelLgsValid = modelCfgValid.LocalGroups;
             diff.Add(CheckExistingAndObsoleteGroups(modelCfgInvalid, gatewayCfg));
             diff.Add(CheckForNewGroups(modelLgsValid, gatewayCfg));
+            diff.Add(CheckForUpdatedGroups(modelLgsValid, gatewayCfg));
             SaveToFile(diff);
             return diff;
         }
@@ -149,7 +150,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     lgDiff.Members.AddRange(modelLocalGroup.Members);
                     lgDiff.MembersObj.AddRange(modelLocalGroup.Members, Enumerable.Repeat(LocalGroupFlag.Delete, modelLocalGroup.Members.Count).ToList());
                     results.Add(lgDiff);
-                }   
+                }
             }
             return results;
         }
@@ -199,6 +200,27 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return result;
         }
 
+        private List<LocalGroup> CheckForUpdatedGroups(List<LocalGroup> modelGroups, GatewayConfig gatewayCfg)
+        {
+            var result = new List<LocalGroup>();
+            foreach (var modelLocalGroup in modelGroups)
+            {
+                if (!IsInConfig(modelLocalGroup.Name, gatewayCfg)) continue;
+                var gatewayLocalGroup = GetConfigRowByName(modelLocalGroup.Name, gatewayCfg);
+                var lg = new LocalGroup(modelLocalGroup.Name, LocalGroupFlag.CheckForUpdate);
+
+                lg.ComputersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Computers, gatewayLocalGroup.Computers));
+                lg.MembersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Members, gatewayLocalGroup.Members));
+
+                if (lg.ComputersObj.Flags.Count(f => (f == LocalGroupFlag.Delete || f == LocalGroupFlag.Add)) > 0 || lg.MembersObj.Flags.Count(f => (f == LocalGroupFlag.Delete || f == LocalGroupFlag.Add)) > 0)
+                {
+                    result.Add(lg);
+                }
+                
+            }
+
+            return result;
+        }
         private LocalGroupContent GetListDiscrepancyTest(ICollection<string> modelList, ICollection<string> otherList)
         {
             var flags = otherList
@@ -219,6 +241,10 @@ namespace RemoteDesktopCleaner.BackgroundServices
         private static bool IsInConfig(string groupName, GatewayConfig config)
         {
             return config.LocalGroups.Select(lg => lg.Name).Contains(groupName);
+        }
+        private static LocalGroup GetConfigRowByName(string groupName, GatewayConfig config)
+        {
+            return config.LocalGroups.FirstOrDefault(lg => lg.Name == groupName);
         }
 
         private static bool IsInListIgnoreCase(string el, ICollection<string> list)
@@ -243,7 +269,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             var groupsToDelete = allGroups.Where(lg => lg.Flag == LocalGroupFlag.Delete).ToList();
             var groupsToAdd = allGroups.Where(lg => lg.Flag == LocalGroupFlag.Add).ToList();
-            var changedContent = allGroups.Where(lg => lg.Flag == LocalGroupFlag.CheckForUpdate && lg.MembersObj.Flags.Any(content => content != LocalGroupFlag.None)).ToList();
+            var changedContent = allGroups.Where(lg => lg.Flag == LocalGroupFlag.CheckForUpdate && (lg.MembersObj.Flags.Any(content => content != LocalGroupFlag.None) || lg.ComputersObj.Flags.Any(content => content != LocalGroupFlag.None))).ToList();
             var groupsToSync = new LocalGroupsChanges();
             groupsToSync.LocalGroupsToDelete = groupsToDelete;
             groupsToSync.LocalGroupsToAdd = groupsToAdd;
