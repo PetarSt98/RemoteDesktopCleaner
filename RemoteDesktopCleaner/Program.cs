@@ -10,8 +10,6 @@ namespace RemoteDesktopCleaner
 {
     class Program
     {
-        private static ManualResetEvent _quitEvent = new ManualResetEvent(false);
-
         static void Main(string[] args)
         {
             try

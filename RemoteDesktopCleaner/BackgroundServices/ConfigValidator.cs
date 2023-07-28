@@ -386,7 +386,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
             try
             {
                 string pathToScript = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SOAPNetworkService.ps1");
-                Console.WriteLine($"-ExecutionPolicy Bypass -File \"{pathToScript}\" -SetName1 \"{computerName}\" -UserName1 \"{userName}\" -Password1 \"{password}\"");
                 ProcessStartInfo startInfo = new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
@@ -541,20 +540,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
             var rapResourcesToDelete = db.rap_resource.Where(rr => rr.toDelete == true).ToList();
             db.rap_resource.RemoveRange(rapResourcesToDelete);
-
-            var rapsToSynchronize = db.raps.Where(r => r.synchronized == false).ToList();
-
-            var rapResourcesToSynchronize = db.rap_resource.Where(rr => rr.synchronized == false).ToList();
-
-            foreach (var rap in rapsToSynchronize)
-            {
-                rap.synchronized = true;
-            }
-
-            foreach (var rapResource in rapResourcesToSynchronize)
-            {
-                rapResource.synchronized = true;
-            }
 
             LoggerSingleton.General.Info("Deleting obsolete RAPs and RAP_Resources from MySQL database");
             LoggerSingleton.Raps.Info("Deleting obsolete RAPs and RAP_Resources from MySQL database");
