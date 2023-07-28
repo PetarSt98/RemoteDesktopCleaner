@@ -402,7 +402,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 string output = await outputTask;
                 string errors = await errorTask;
                 if (output.Length == 0 || errors.Length > 0) throw new ComputerNotFoundInActiveDirectoryException(errors);
-                Console.WriteLine($"Successful call of SOAP Service: {computerName}");
                 LoggerSingleton.Raps.Debug($"Successful call of SOAP Service: {computerName}");
                 Dictionary<string, string> result = ConvertStringToDictionary(output);
                 process.WaitForExit();
