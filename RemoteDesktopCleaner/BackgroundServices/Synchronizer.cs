@@ -53,8 +53,9 @@ namespace RemoteDesktopCleaner.BackgroundServices
             LoggerSingleton.General.Info("Started comparing Local Groups and members from database and server");
             GatewayConfig modelCfgValid = ReadValidConfigDbModel();
             GatewayConfig modelCfgInvalid = ReadInvalidConfigDbModel();
+            GatewayConfig modelCfgSubInvalid = ReadSubInvalidConfigDbModel();
             GatewayConfig gatewayCfg = ReadGatewayConfigFromFile(serverName);
-            return CompareWithModel(gatewayCfg, modelCfgValid, modelCfgInvalid);
+            return CompareWithModel(gatewayCfg, modelCfgValid, modelCfgInvalid, modelCfgSubInvalid);
         }
 
         public GatewayConfig ReadGatewayConfigFromFile(string serverName)
@@ -106,14 +107,14 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         public GatewayConfig ReadInvalidConfigDbModel()
         {
-            LoggerSingleton.General.Info("Getting valid config model.");
+            LoggerSingleton.General.Info("Getting invalid config model.");
             var raps = GetRaps();
             var localGroups = new List<LocalGroup>();
-            var validRaps = raps.Where(IsRapInvalid);
-            foreach (var rap in validRaps)
+            var invalidRaps = raps.Where(IsRapInvalid);
+            foreach (var rap in invalidRaps)
             {
                 var owner = rap.login;
-                var resources = rap.rap_resource.Where(IsResourceInvalid)
+                var resources = rap.rap_resource
                     .Select(resource => $"{resource.resourceName}$").ToList();
                 resources.Add(owner);
                 var lg = new LocalGroup(rap.resourceGroupName, resources);
@@ -123,14 +124,36 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return gatewayModel;
         }
 
-        public GatewayConfig CompareWithModel(GatewayConfig gatewayCfg, GatewayConfig modelCfgValid, GatewayConfig modelCfgInvalid)
+        public GatewayConfig ReadSubInvalidConfigDbModel()
+        {
+            LoggerSingleton.General.Info("Getting changed config model.");
+            var raps = GetRaps();
+            var localGroups = new List<LocalGroup>();
+            var validRaps = raps.Where(IsRapValid);
+            foreach (var rap in validRaps)
+            {
+                var owner = rap.login;
+                var resources = rap.rap_resource.Where(IsResourceToDelete)
+                    .Select(resource => $"{resource.resourceName}$").ToList();
+
+                if (resources.Count == 0) continue;
+
+                resources.Add(owner);
+                var lg = new LocalGroup(rap.resourceGroupName, resources);
+                localGroups.Add(lg);
+            }
+            var gatewayModel = new GatewayConfig("MODEL", localGroups);
+            return gatewayModel;
+        }
+
+    public GatewayConfig CompareWithModel(GatewayConfig gatewayCfg, GatewayConfig modelCfgValid, GatewayConfig modelCfgInvalid, GatewayConfig modelCfgSubInvalid)
         {
             LoggerSingleton.General.Debug($"Comparing gateway '{gatewayCfg.ServerName}' config to DB model.");
             var diff = new GatewayConfig(gatewayCfg.ServerName);
             var modelLgsValid = modelCfgValid.LocalGroups;
             diff.Add(CheckExistingAndObsoleteGroups(modelCfgInvalid, gatewayCfg));
             diff.Add(CheckForNewGroups(modelLgsValid, gatewayCfg));
-            diff.Add(CheckForUpdatedGroups(modelLgsValid, gatewayCfg));
+            diff.Add(CheckForUpdatedGroups(modelLgsValid, gatewayCfg, modelCfgSubInvalid));
             SaveToFile(diff);
             return diff;
         }
@@ -200,7 +223,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return result;
         }
 
-        private List<LocalGroup> CheckForUpdatedGroups(List<LocalGroup> modelGroups, GatewayConfig gatewayCfg)
+        private List<LocalGroup> CheckForUpdatedGroups(List<LocalGroup> modelGroups, GatewayConfig gatewayCfg, GatewayConfig ToDeleteDevices)
         {
             var result = new List<LocalGroup>();
             foreach (var modelLocalGroup in modelGroups)
@@ -212,6 +235,8 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 lg.ComputersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Computers, gatewayLocalGroup.Computers));
                 lg.MembersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Members, gatewayLocalGroup.Members));
 
+                //lg.checkForOrphanedSid();
+
                 if (lg.ComputersObj.Flags.Count(f => (f == LocalGroupFlag.Delete || f == LocalGroupFlag.Add)) > 0 || lg.MembersObj.Flags.Count(f => (f == LocalGroupFlag.Delete || f == LocalGroupFlag.Add)) > 0)
                 {
                     result.Add(lg);
@@ -219,8 +244,25 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 
             }
 
+            foreach (var toUpdateLocalGroup in ToDeleteDevices.LocalGroups)
+            {
+                var gatewayLocalGroup = GetConfigRowByName(toUpdateLocalGroup.Name, gatewayCfg);
+                var lg = new LocalGroup(toUpdateLocalGroup.Name, LocalGroupFlag.CheckForUpdate);
+
+                List<LocalGroupFlag> flags = new List<LocalGroupFlag>(new LocalGroupFlag[toUpdateLocalGroup.Computers.Count]);
+
+                for (int i = 0; i < toUpdateLocalGroup.Computers.Count; i++)
+                {
+                    flags[i] = LocalGroupFlag.Delete;
+                }
+
+                lg.ComputersObj.AddRange(new LocalGroupContent(toUpdateLocalGroup.Computers, flags));
+                result.Add(lg);
+            }
+
             return result;
         }
+
         private LocalGroupContent GetListDiscrepancyTest(ICollection<string> modelList, ICollection<string> otherList)
         {
             var flags = otherList
@@ -326,6 +368,11 @@ namespace RemoteDesktopCleaner.BackgroundServices
         private bool IsResourceInvalid(rap_resource resource)
         {
             return resource.toDelete || !resource.invalid.HasValue || resource.invalid.Value;
+        }
+
+        private bool IsResourceToDelete(rap_resource resource)
+        {
+            return resource.toDelete;
         }
     }
 }
