@@ -51,7 +51,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         public bool MarkObsoleteData()
         {
-            bool cacheFlag = true;
+            bool cacheFlag = false;
             if (cacheFlag) return true;
 
             LoggerSingleton.General.Info("Started validation of  DB RAPs and corresponding Resources.");
