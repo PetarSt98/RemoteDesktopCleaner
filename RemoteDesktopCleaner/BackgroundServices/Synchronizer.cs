@@ -24,6 +24,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 LoggerSingleton.General.Info($"Starting the synchronization of '{serverName}' gateway.");
                 LoggerSingleton.General.Info($"Awaiting getting gateway RAP/Policy names for '{serverName}'.");
+                Console.WriteLine($"Get policies on {serverName}");
                 var taskGtRapNames = _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(serverName);
                 LoggerSingleton.General.Info($"Awaiting getting gateway Local Group names for '{serverName}'.");
                 if (_gatewayLocalGroupSynchronizer.DownloadGatewayConfig(serverName))
