@@ -73,7 +73,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 var localGroups = new List<LocalGroup>();
                 var dstDir = AppConfig.GetInfoDir();
-                var path = dstDir + @"\" + serverName + ".json";
+                var path = serverName + ".json";
                 var content = File.ReadAllText(path);
                 LoggerSingleton.SynchronizedLocalGroups.Debug($"Reading local groups for '{serverName}' from file.");
                 LoggerSingleton.General.Debug($"Reading local groups for '{serverName}' from file.");
@@ -258,7 +258,9 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 }
 
                 lg.ComputersObj.AddRange(new LocalGroupContent(toUpdateLocalGroup.Computers, flags));
-                result.Add(lg);
+
+                if(!result.Any(group => group.Name == lg.Name))
+                    result.Add(lg);
             }
 
             return result;
@@ -299,7 +301,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             try
             {
-                var path = AppConfig.GetInfoDir() + @"\" + diff.ServerName + "-diff.json";
+                var path = diff.ServerName + "-diff.json";
                 File.WriteAllText(path, JsonSerializer.Serialize(diff));
             }
             catch (Exception ex)

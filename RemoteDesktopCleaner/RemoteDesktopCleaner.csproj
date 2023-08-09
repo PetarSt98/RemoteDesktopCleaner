@@ -78,5 +78,16 @@
 	<ItemGroup>
     <ProjectReference Include="..\SynchronizerLibrary\SynchronizerLibrary.csproj" />
   </ItemGroup>
-
+	<ItemGroup>
+		<None Include=".\nlog.config">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Include=".\App.config">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<Exec Command="if not exist $(TargetDir)\Logs mkdir $(TargetDir)\Logs" />
+		<Exec Command="if not exist $(TargetDir)\Info mkdir $(TargetDir)\Info" />
+	</Target>
 </Project>

@@ -1,9 +1,9 @@
 ﻿using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
 using SynchronizerLibrary.Data;
-using System.Diagnostics;
 using RemoteDesktopCleaner.Exceptions;
 using SynchronizerLibrary.Loggers;
+using SynchronizerLibrary.SOAPservices;
 
 
 namespace RemoteDesktopCleaner.BackgroundServices
@@ -52,8 +52,11 @@ namespace RemoteDesktopCleaner.BackgroundServices
         public bool MarkObsoleteData()
         {
             bool cacheFlag = false;
-            if (cacheFlag) return true;
-
+            if (cacheFlag)
+            {
+                Console.WriteLine("Skipping (using cached) Data Base");
+                return true;
+            }
             LoggerSingleton.General.Info("Started validation of  DB RAPs and corresponding Resources.");
             Console.WriteLine("Started validation of  DB RAPs and corresponding Resources.");
             var raps = new List<rap>();
@@ -201,7 +204,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     if (IsPolicyAnException(rapOwner, login, computerName, resource))
                         return new PolicyValidationResult(true);
 
-                    Dictionary<string, string> deviceInfo = Task.Run(() => ExecutePowerShellSOAPScript(computerName, username, password)).Result;
+                    Dictionary<string, string> deviceInfo = Task.Run(() => SOAPMethods.ExecutePowerShellSOAPScript(computerName, username, password)).Result;
 
                     bool bNetworkOk = CheckDeviceDomainInterfaces(deviceInfo);
                     bool isNiceMember = IsUserNiceGroupMember(domainContext, rapOwnerPrincipal);
@@ -379,69 +382,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             if (NetworkDomainName.Length == 0) return false;
             return _allowedNetworkDomains.Contains(NetworkDomainName.ToUpper());
-        }
-
-        static async Task<Dictionary<string, string>> ExecutePowerShellSOAPScript(string computerName, string userName, string password)
-        {
-            Console.WriteLine($"Calling SOAP Service: {computerName}");
-            LoggerSingleton.Raps.Debug($"Calling SOAP Service: {computerName}");
-            
-            try
-            {
-                string pathToScript = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SOAPNetworkService.ps1");
-                ProcessStartInfo startInfo = new ProcessStartInfo
-                {
-                    FileName = "powershell.exe",
-                    Arguments = $"-ExecutionPolicy Bypass -File \"{pathToScript}\" -SetName1 \"{computerName}\" -UserName1 \"{userName}\" -Password1 \"{password}\"",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                using Process process = new Process { StartInfo = startInfo };
-                process.Start();
-                Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
-                Task<string> errorTask = process.StandardError.ReadToEndAsync();
-                string output = await outputTask;
-                string errors = await errorTask;
-                if (output.Length == 0 || errors.Length > 0) throw new ComputerNotFoundInActiveDirectoryException(errors);
-                LoggerSingleton.Raps.Debug($"Successful call of SOAP Service: {computerName}");
-                Dictionary<string, string> result = ConvertStringToDictionary(output);
-                process.WaitForExit();
-
-                return result;
-            }
-            catch (ComputerNotFoundInActiveDirectoryException ex)
-            {
-                Console.WriteLine($"{ex.Message} Unable to use SOAP operations for device: {computerName}");
-                LoggerSingleton.Raps.Error($"{ex.Message} Unable to use SOAP operations for device: {computerName}");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-                LoggerSingleton.Raps.Error($"{ex.Message}");
-                return null;
-            }
-        }
-
-        public static Dictionary<string, string> ConvertStringToDictionary(string input)
-        {
-            Dictionary<string, string> result = new Dictionary<string, string>();
-            string[] lines = input.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (string line in lines)
-            {
-                int separatorIndex = line.IndexOf(':');
-                if (separatorIndex > 0)
-                {
-                    string key = line.Substring(0, separatorIndex).Trim();
-                    string value = line.Substring(separatorIndex + 1).Trim();
-                    result[key] = value;
-                }
-            }
-
-            return result;
         }
 
         #endregion
