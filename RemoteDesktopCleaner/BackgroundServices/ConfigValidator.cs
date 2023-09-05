@@ -204,7 +204,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     if (IsPolicyAnException(rapOwner, login, computerName, resource))
                         return new PolicyValidationResult(true);
 
-                    Dictionary<string, string> deviceInfo = Task.Run(() => SOAPMethods.ExecutePowerShellSOAPScript(computerName, username, password)).Result;
+                    Dictionary<string, string> deviceInfo = Task.Run(() => SOAPMethods.ExecutePowerShellSOAPScript(computerName, rapOwner.Replace("RAP_", ""), username, password)).Result;
 
                     bool bNetworkOk = CheckDeviceDomainInterfaces(deviceInfo);
                     bool isNiceMember = IsUserNiceGroupMember(domainContext, rapOwnerPrincipal);
