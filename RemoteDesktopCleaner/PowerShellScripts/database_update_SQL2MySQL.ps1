@@ -32,11 +32,12 @@ foreach ($table in $tables) {
 
     foreach ($row in $source_data) {
         # Check if the row exists in the target MySQL table
-        $name = $row.name
+        
         if ($tableName -eq "RAP") {
-
+            $name = $row.name
             $exist_query = "SELECT COUNT(*) FROM ``$tableName`` WHERE ``name`` = '$name'"
         } else {
+            $name = $row.RAPName
             $exist_query = "SELECT COUNT(*) FROM ``$tableName`` WHERE ``RAPName`` = '$name'"
         }
         $cmd = New-Object MySql.Data.MySqlClient.MySqlCommand($exist_query, $target_conn)
