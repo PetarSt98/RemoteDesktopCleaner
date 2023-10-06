@@ -36,7 +36,7 @@ namespace RemoteDesktopCleaner
             }
         }
 
-        private static IServiceProvider ConfigureServices()
+        public static IServiceProvider ConfigureServices()
         {
             LoggerSingleton.General.Info("Configuring services");
             Console.WriteLine("Configuring services");
@@ -44,9 +44,12 @@ namespace RemoteDesktopCleaner
             var services = new ServiceCollection();
             services.AddSingleton<IConfigValidator, ConfigValidator>();
             services.AddSingleton<IGatewayRapSynchronizer, GatewayRapSynchronizer>();
+            services.AddSingleton<IDataRestoration, DataRestoration>();
             services.AddSingleton<ISynchronizer, Synchronizer>();
             services.AddSingleton<IGatewayLocalGroupSynchronizer, GatewayLocalGroupSynchronizer>();
             services.AddSingleton<SynchronizationWorker>();
+            services.AddSingleton<CacheWorker>();
+            services.AddSingleton<RestorationWorker>();
 
             var serviceProvider = services.BuildServiceProvider();
 
@@ -54,6 +57,66 @@ namespace RemoteDesktopCleaner
             Console.WriteLine("Finished configuring services");
 
             return serviceProvider;
+        }
+    }
+
+    class CacheData
+    {
+        static void Main(string[] args)
+        {
+            try
+            {
+                LoggerSingleton.General.Info("Starting RemoteDesktopCleaner console app");
+                Console.WriteLine("Starting RemoteDesktopCleaner console app");
+
+                var serviceProvider = Program.ConfigureServices();
+
+                var cw = serviceProvider.GetRequiredService<CacheWorker>();
+
+                Console.WriteLine("Starting initial cleaning");
+                cw.StartAsync(new CancellationToken()).GetAwaiter().GetResult();
+
+            }
+            catch (NoAccesToDomain)
+            {
+                LoggerSingleton.General.Fatal("Unable to access domain (to fetch admin usernames).");
+                Console.WriteLine("Unable to access domain (to fetch admin usernames).");
+            }
+            catch (Exception ex)
+            {
+                LoggerSingleton.General.Fatal(ex.Message);
+                Console.WriteLine(ex.Message);
+            }
+        }
+    }
+
+    class RestoreData
+    {
+        static void Main(string[] args)
+        {
+            try
+            {
+                LoggerSingleton.General.Info("Starting RemoteDesktopCleaner console app");
+                Console.WriteLine("Starting RemoteDesktopCleaner console app");
+
+                var serviceProvider = Program.ConfigureServices();
+
+                var cw = serviceProvider.GetRequiredService<RestorationWorker>();
+
+                Console.WriteLine("Starting initial cleaning");
+                cw.StartAsync(new CancellationToken()).GetAwaiter().GetResult();
+
+            }
+            catch (NoAccesToDomain)
+            {
+                LoggerSingleton.General.Fatal("Unable to access domain (to fetch admin usernames).");
+                Console.WriteLine("Unable to access domain (to fetch admin usernames).");
+            }
+            catch (Exception ex)
+            {
+                LoggerSingleton.General.Fatal(ex.Message);
+                Console.WriteLine(ex.Message);
+            }
         }
     }
 }

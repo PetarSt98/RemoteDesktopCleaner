@@ -25,9 +25,9 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 LoggerSingleton.General.Info($"Starting the synchronization of '{serverName}' gateway.");
                 LoggerSingleton.General.Info($"Awaiting getting gateway RAP/Policy names for '{serverName}'.");
                 Console.WriteLine($"Get policies on {serverName}");
-                var taskGtRapNames = _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(serverName);
+                var taskGtRapNames = _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(serverName, false);
                 LoggerSingleton.General.Info($"Awaiting getting gateway Local Group names for '{serverName}'.");
-                if (_gatewayLocalGroupSynchronizer.DownloadGatewayConfig(serverName))
+                if (_gatewayLocalGroupSynchronizer.DownloadGatewayConfig(serverName, false))
                 {
                     var cfgDiscrepancy = GetConfigDiscrepancy(serverName); // fali update
                     var changedLocalGroups = FilterChangedLocalGroups(cfgDiscrepancy.LocalGroups); 
@@ -59,7 +59,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return CompareWithModel(gatewayCfg, modelCfgValid, modelCfgInvalid, modelCfgSubInvalid);
         }
 
-        public GatewayConfig ReadGatewayConfigFromFile(string serverName)
+        public static GatewayConfig ReadGatewayConfigFromFile(string serverName)
         {
             LoggerSingleton.General.Info($"Reading config for gateway: '{serverName}' from file.");
             var lgGroups = GetGatewayLocalGroupsFromFile(serverName);
@@ -67,7 +67,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return cfg;
         }
 
-        private List<LocalGroup> GetGatewayLocalGroupsFromFile(string serverName)
+        private static List<LocalGroup> GetGatewayLocalGroupsFromFile(string serverName)
         {
             try
             {
@@ -310,7 +310,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
         }
 
-        private LocalGroupsChanges FilterChangedLocalGroups(List<LocalGroup> allGroups)
+        public static LocalGroupsChanges FilterChangedLocalGroups(List<LocalGroup> allGroups)
         {
             var groupsToDelete = allGroups.Where(lg => lg.Flag == LocalGroupFlag.Delete).ToList();
             var groupsToAdd = allGroups.Where(lg => lg.Flag == LocalGroupFlag.Add).ToList();
@@ -322,7 +322,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return groupsToSync;
         }
 
-        private List<string> GetAllGatewayGroupsAfterSynchronization(LocalGroupsChanges discrepancy)
+        public static List<string> GetAllGatewayGroupsAfterSynchronization(LocalGroupsChanges discrepancy)
         {
             var alreadyExistingGroups = discrepancy.LocalGroupsToUpdate
                                                     .Where(lg => lg.Name.StartsWith("LG-"))

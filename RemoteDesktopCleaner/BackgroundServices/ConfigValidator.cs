@@ -21,19 +21,26 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         public ConfigValidator()
         {
-            domainContext = new PrincipalContext(ContextType.Domain, DomainName);
-
-            LoggerSingleton.General.Info("Getting all Admin names");
-            var niceLocalAdminGroupPrincipal = GroupPrincipal.FindByIdentity(domainContext, GlobalAdminGroup);
-            if (niceLocalAdminGroupPrincipal != null)
+            try
             {
-                members = niceLocalAdminGroupPrincipal.GetMembers(true);
+                domainContext = new PrincipalContext(ContextType.Domain, DomainName);
+
+                LoggerSingleton.General.Info("Getting all Admin names");
+                var niceLocalAdminGroupPrincipal = GroupPrincipal.FindByIdentity(domainContext, GlobalAdminGroup);
+                if (niceLocalAdminGroupPrincipal != null)
+                {
+                    members = niceLocalAdminGroupPrincipal.GetMembers(true);
+                }
+                else
+                {
+                    members = null;
+                    LoggerSingleton.General.Fatal("Unable to reach Domain.");
+                    throw new NoAccesToDomain();
+                }
             }
-            else
+            catch (Exception ex)
             {
                 members = null;
-                LoggerSingleton.General.Fatal("Unable to reach Domain.");
-                throw new NoAccesToDomain();
             }
         }
 
