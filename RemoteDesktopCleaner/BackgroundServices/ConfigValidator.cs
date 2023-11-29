@@ -80,7 +80,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     }
                     foreach (var rapRow in raps)
                     {
-
                         //if (i > 100) break;
                         LoggerSingleton.Raps.Debug($"{i} - Rap login to be processed {rapRow.login}");
                         Console.Write($"\r{i}/{raps.Count} - {100 * i / raps.Count}% ");
@@ -211,7 +210,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     if (IsPolicyAnException(rapOwner, login, computerName, resource))
                         return new PolicyValidationResult(true);
 
-                    Dictionary<string, string> deviceInfo = Task.Run(() => SOAPMethods.ExecutePowerShellSOAPScript(computerName, rapOwner.Replace("RAP_", ""), username, password)).Result;
+                    Dictionary<string, string> deviceInfo = Task.Run(() => SOAPMethods.ExecutePowerShellSOAPScript(computerName, rapOwner.Replace("RAP_", ""))).Result;
 
                     bool bNetworkOk = CheckDeviceDomainInterfaces(deviceInfo);
                     bool isNiceMember = IsUserNiceGroupMember(domainContext, rapOwnerPrincipal);

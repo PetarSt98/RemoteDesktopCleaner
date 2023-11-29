@@ -1,12 +1,28 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup Condition="'$(Configuration)'=='Program'">
+    <DefineConstants>PROGRAM</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='ProgramDebug'">
+    <DefineConstants>PROGRAM</DefineConstants>
 
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='CacheData'">
+    <DefineConstants>CACHEDATA</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='RestoreData'">
+    <DefineConstants>RESTOREDATA</DefineConstants>
+  </PropertyGroup>
+	                                   
+  
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TargetFrameworks></TargetFrameworks>
-    <StartupObject>RemoteDesktopCleaner.Program</StartupObject>
+    <StartupObject></StartupObject>
+    <Configurations>Debug;Release;Program;CacheData;RestoreData;CleanerDebug;ProgramDebug</Configurations>
   </PropertyGroup>
 	<ItemGroup>
 	<PackageReference Include="Microsoft.Management.Infrastructure" Version="2.0.0" />
@@ -90,5 +106,6 @@
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
 		<Exec Command="if not exist $(TargetDir)\Logs mkdir $(TargetDir)\Logs" />
 		<Exec Command="if not exist $(TargetDir)\Info mkdir $(TargetDir)\Info" />
+		<Exec Command="if not exist $(TargetDir)\Cache mkdir $(TargetDir)\Cache" />	
 	</Target>
 </Project>

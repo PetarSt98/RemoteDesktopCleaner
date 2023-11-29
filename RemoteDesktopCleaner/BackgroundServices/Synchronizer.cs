@@ -2,7 +2,8 @@
 using SynchronizerLibrary.Data;
 using SynchronizerLibrary.Loggers;
 using SynchronizerLibrary.CommonServices;
-
+using SynchronizerLibrary.CommonServices.LocalGroups;
+using SynchronizerLibrary.Caching;
 
 
 namespace RemoteDesktopCleaner.BackgroundServices
@@ -18,7 +19,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             _gatewayRapSynchronizer = gatewayRapSynchronizer;
         }
 
-        public async void SynchronizeAsync(string serverName)
+        public async Task SynchronizeAsync(string serverName)
         {
             try
             {
@@ -73,11 +74,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 var localGroups = new List<LocalGroup>();
                 var dstDir = AppConfig.GetInfoDir();
-                var path = serverName + ".json";
-                var content = File.ReadAllText(path);
+                //var path = serverName + ".json";
+                //var content = File.ReadAllText(path);
                 LoggerSingleton.SynchronizedLocalGroups.Debug($"Reading local groups for '{serverName}' from file.");
                 LoggerSingleton.General.Debug($"Reading local groups for '{serverName}' from file.");
-                localGroups.AddRange(Newtonsoft.Json.JsonConvert.DeserializeObject<List<LocalGroup>>(content));
+                //localGroups.AddRange(Newtonsoft.Json.JsonConvert.DeserializeObject<List<LocalGroup>>(content));
+
+                localGroups.AddRange(Cacher.LoadLocalGroupCacheFromFile(serverName));
                 return localGroups;
             }
             catch (Exception ex)
@@ -153,9 +156,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
             var diff = new GatewayConfig(gatewayCfg.ServerName);
             var modelLgsValid = modelCfgValid.LocalGroups;
             diff.Add(CheckExistingAndObsoleteGroups(modelCfgInvalid, gatewayCfg));
+            LoggerSingleton.General.Debug($"Number of users/groups to delete {diff.LocalGroups.Count()}.");
             diff.Add(CheckForNewGroups(modelLgsValid, gatewayCfg));
+            LoggerSingleton.General.Debug($"Number of users/groups to add and delete {diff.LocalGroups.Count()}.");
             diff.Add(CheckForUpdatedGroups(modelLgsValid, gatewayCfg, modelCfgSubInvalid));
             SaveToFile(diff);
+            Console.WriteLine(diff.LocalGroups.Count());
+            LoggerSingleton.General.Debug($"Number of users/groups to update {diff.LocalGroups.Count()}.");
             return diff;
         }
 
@@ -233,8 +240,8 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 var gatewayLocalGroup = GetConfigRowByName(modelLocalGroup.Name, gatewayCfg);
                 var lg = new LocalGroup(modelLocalGroup.Name, LocalGroupFlag.CheckForUpdate);
 
-                lg.ComputersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Computers, gatewayLocalGroup.Computers));
-                lg.MembersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Members, gatewayLocalGroup.Members));
+                lg.ComputersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Computers, gatewayLocalGroup.ComputersObj.Names));
+                lg.MembersObj.AddRange(GetListDiscrepancyTest(modelLocalGroup.Members, gatewayLocalGroup.MembersObj.Names));
 
                 //lg.checkForOrphanedSid();
 

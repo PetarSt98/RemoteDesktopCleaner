@@ -2,6 +2,7 @@
 using SynchronizerLibrary.Data;
 using SynchronizerLibrary.Loggers;
 using SynchronizerLibrary.CommonServices;
+using SynchronizerLibrary.CommonServices.LocalGroups;
 
 
 namespace RemoteDesktopCleaner.BackgroundServices

@@ -42,15 +42,20 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     Console.WriteLine("Failed marking obsolete data in RemoteDesktop MySQL database. Existing one will be used.");
                 }
 
-                var gatewaysToSynchronize = new List<string>{"cerngt01"};
+                var gatewaysToSynchronize = new List<string> { "cerngt01", "cerngt05", "cerngt06", "cerngt07" };
+                var synchronizationTasks = new List<Task>();
 
                 foreach (var gatewayName in gatewaysToSynchronize)
                 {
-
                     GlobalInstance.Instance.Names.Add(gatewayName);
                     GlobalInstance.Instance.ObjectLists[gatewayName] = new Dictionary<string, RAP_ResourceStatus>();
-                    _synchronizer.SynchronizeAsync(gatewayName);
+                    var syncTask = _synchronizer.SynchronizeAsync(gatewayName);
+                    synchronizationTasks.Add(syncTask);
                 }
+
+                // Wait for all synchronization tasks to complete
+                await Task.WhenAll(synchronizationTasks);
+
                 DatabaseSynchronizator databaseSynchronizator = new DatabaseSynchronizator();
                 databaseSynchronizator.AverageGatewayReults();
                 databaseSynchronizator.UpdateDatabase();

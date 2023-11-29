@@ -77,6 +77,7 @@ function CreateTableInMySQL($table) {
     
     if ($Add_toDelete_column){
         $createTableQuery += "toDelete BIT NOT NULL, "
+        $createTableQuery += "unsynchronizedGateways VARCHAR(255), "
     }
     $createTableQuery = $createTableQuery.TrimEnd(", ") + ")"
     Write-Host "Create Table Query: $createTableQuery" # Add this line to print the query
@@ -157,6 +158,11 @@ foreach ($table in $tables) {
              $column_names = $columns + "toDelete"
         } else {
             $column_names = $columns
+        }
+
+        if ($Add_toDelete_column){
+             $escaped_values += "''"
+             $column_names = $column_names + "unsynchronizedGateways"
         }
 
         try{
