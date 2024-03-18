@@ -9,14 +9,14 @@ using System.Collections.Concurrent;
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {
-    public sealed class RestorationWorker : BackgroundService
+    public sealed class GatewayInitWorker : BackgroundService
     {
         private readonly IConfigValidator _configValidator;
-        private readonly IDataRestoration _dataRestoration;
+        private readonly IServerInit _serverInit;
 
-        public RestorationWorker(IDataRestoration dataRestoration, IConfigValidator configValidator)
+        public GatewayInitWorker(IServerInit serverInit, IConfigValidator configValidator)
         {
-            _dataRestoration = dataRestoration;
+            _serverInit = serverInit;
             _configValidator = configValidator;
         }
 
@@ -29,25 +29,14 @@ namespace RemoteDesktopCleaner.BackgroundServices
             try
             {
 
-                var gatewaysToSynchronize = new List<string>{ "cerngt07" };
-
+                var gatewaysToSynchronize = AppConfig.GetGatewaysInUse();
                 foreach (var gatewayName in gatewaysToSynchronize)
                 {
 
                     GlobalInstance.Instance.Names.Add(gatewayName);
                     GlobalInstance.Instance.ObjectLists[gatewayName] = new ConcurrentDictionary<string, RAP_ResourceStatus>();
-                    await _dataRestoration.SynchronizeAsync(gatewayName);
+                    await _serverInit.SynchronizeAsync(gatewayName);
                 }
-                DatabaseSynchronizator databaseSynchronizator = new DatabaseSynchronizator();
-                databaseSynchronizator.AverageGatewayReults();
-                databaseSynchronizator.UpdateDatabase();
-
-
-                using (var db = new RapContext())
-                {
-                    ConfigValidator.UpdateDatabase(db);
-                }
-
             }
             catch (OperationCanceledException)
             {

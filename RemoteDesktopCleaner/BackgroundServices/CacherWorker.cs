@@ -30,8 +30,8 @@ namespace RemoteDesktopCleaner.BackgroundServices
             try
             {
 
-                var gatewaysToSynchronize = new List<string>{ "cerngt01","cerngt05","cerngt06","cerngt07" };
-
+                //var gatewaysToSynchronize = new List<string>{ "cerngt01","cerngt05","cerngt06","cerngt07" };
+                var gatewaysToSynchronize = new List<string> { "cerngt08" };
                 foreach (var gatewayName in gatewaysToSynchronize)
                 {
 
@@ -40,7 +40,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     Console.WriteLine($"Get policies on {gatewayName}");
                     var taskGtRapNames = _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(gatewayName, false);
                     LoggerSingleton.General.Info($"Awaiting getting gateway Local Group names for '{gatewayName}'.");
-                    bool flagic = _gatewayLocalGroupSynchronizer.DownloadGatewayConfig(gatewayName, false);
+                    _ = await _gatewayLocalGroupSynchronizer.DownloadGatewayConfig(gatewayName, false);
                 }
 
             }

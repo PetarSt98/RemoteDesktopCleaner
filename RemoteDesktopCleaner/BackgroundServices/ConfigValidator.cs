@@ -80,7 +80,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     }
                     foreach (var rapRow in raps)
                     {
-                        //if (i > 100) break;
                         LoggerSingleton.Raps.Debug($"{i} - Rap login to be processed {rapRow.login}");
                         Console.Write($"\r{i}/{raps.Count} - {100 * i / raps.Count}% ");
                         i++;
@@ -162,7 +161,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 if (result.Invalid)
                 {
-                    LoggerSingleton.Raps.Warn($"RAP-Resource '{rapRow.name}'-'{resource.resourceName}' skipped: {result.Message}");
+                    LoggerSingleton.Raps.Warn($"RAP-Resource '{rapRow.name}'-'{resource.resourceName}' marked as invalid: {result.Message}");
                     resource.invalid = result.Invalid;
                 }
                 else
@@ -207,12 +206,12 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     ComputerExistsInActiveDirectory(computerName);
                     rapOwnerPrincipal = GetRapOwnerFromActiveDirectory(domainContext, rapOwner);
 
-                    if (IsPolicyAnException(rapOwner, login, computerName, resource))
-                        return new PolicyValidationResult(true);
+                    //if (IsPolicyAnException(rapOwner, login, computerName, resource))
+                    //    return new PolicyValidationResult(true);
 
                     Dictionary<string, string> deviceInfo = Task.Run(() => SOAPMethods.ExecutePowerShellSOAPScript(computerName, rapOwner.Replace("RAP_", ""))).Result;
 
-                    bool bNetworkOk = CheckDeviceDomainInterfaces(deviceInfo);
+                    //bool bNetworkOk = CheckDeviceDomainInterfaces(deviceInfo);
                     bool isNiceMember = IsUserNiceGroupMember(domainContext, rapOwnerPrincipal);
                     if (!isNiceMember)
                     {
@@ -220,8 +219,8 @@ namespace RemoteDesktopCleaner.BackgroundServices
                         LoggerSingleton.Raps.Warn(msg);
                         Console.WriteLine(msg);
                     }
-                    else if (bNetworkOk)
-                        return new PolicyValidationResult(false, "Good resource");
+                    //else if (bNetworkOk)
+                    //    return new PolicyValidationResult(false, "Good resource");
 
                     bool isUserAllowed = IsRapOwnerResponsible(domainContext, rapOwnerPrincipal, deviceInfo);
                     switch (isUserAllowed)
@@ -231,10 +230,12 @@ namespace RemoteDesktopCleaner.BackgroundServices
                                 $"RAP owner '{rapOwner}' is not the responsible/user for the computer '{computerName}'.";
                             LoggerSingleton.Raps.Warn(msg);
                             break;
-                        case true when bNetworkOk:
-                            return new PolicyValidationResult(false, "Rap owner is responsible, network domain name allowed ");
-                        case true when !bNetworkOk:
-                            return new PolicyValidationResult(true, "Rap owner is responsible, network domain name not allowed ");
+                        //case true when bNetworkOk:
+                        //    return new PolicyValidationResult(false, "Rap owner is responsible, network domain name allowed ");
+                        //case true when !bNetworkOk:
+                        //    return new PolicyValidationResult(true, "Rap owner is responsible, network domain name not allowed ");
+                        case true:
+                            return new PolicyValidationResult(true, "Rap owner is responsible");
                         default:
                             LoggerSingleton.Raps.Warn($"Account '{rapOwner}' is not allowed to manage computer '{computerName}'.");
                             //throw new InvalidPolicyException();

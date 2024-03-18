@@ -5,7 +5,7 @@ using SynchronizerLibrary.Loggers;
 using SynchronizerLibrary.Data;
 using SynchronizerLibrary.DataBuffer;
 using Microsoft.EntityFrameworkCore;
-
+using System.Collections.Concurrent;
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {
@@ -24,13 +24,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
         {
             LoggerSingleton.General.Info("Cleaner Worker is starting.");
             Console.WriteLine("Cleaner Worker is starting.");
-            var gateways = AppConfig.GetGatewaysInUse();
+            var gatewaysToSynchronize = AppConfig.GetGatewaysInUse();
             stoppingToken.Register(() => LoggerSingleton.General.Info("CleanerWorker background task is stopping."));
             //while (!stoppingToken.IsCancellationRequested)
             //{
             try
             {
-                Console.WriteLine($"Starting weekly synchronization for the following gateways: {string.Join(",", gateways)}");
+                //Console.WriteLine($"Starting weekly synchronization for the following gateways: {string.Join(",", gatewaysToSynchronize)}");
                 if (_configValidator.MarkObsoleteData())
                 {
                     LoggerSingleton.General.Info("Successful marked obsolete data in RemoteDesktop MySQL database.");
@@ -42,15 +42,15 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     Console.WriteLine("Failed marking obsolete data in RemoteDesktop MySQL database. Existing one will be used.");
                 }
 
-                var gatewaysToSynchronize = new List<string> { "cerngt01", "cerngt05", "cerngt06", "cerngt07" };
+                //var gatewaysToSynchronize = new List<string> { "cerngt01", "cerngt05", "cerngt06", "cerngt07" };
                 var synchronizationTasks = new List<Task>();
+
 
                 foreach (var gatewayName in gatewaysToSynchronize)
                 {
                     GlobalInstance.Instance.Names.Add(gatewayName);
-                    GlobalInstance.Instance.ObjectLists[gatewayName] = new Dictionary<string, RAP_ResourceStatus>();
-                    var syncTask = _synchronizer.SynchronizeAsync(gatewayName);
-                    synchronizationTasks.Add(syncTask);
+                    GlobalInstance.Instance.ObjectLists[gatewayName] = new ConcurrentDictionary<string, RAP_ResourceStatus>();
+                    synchronizationTasks.Add(Task.Run(() => _synchronizer.SynchronizeAsync(gatewayName)));
                 }
 
                 // Wait for all synchronization tasks to complete

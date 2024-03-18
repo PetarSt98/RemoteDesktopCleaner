@@ -18,29 +18,29 @@ namespace RemoteDesktopCleaner.BackgroundServices
             _gatewayRapSynchronizer = gatewayRapSynchronizer;
         }
 
-        public async void SynchronizeAsync(string serverName)
+        public async Task SynchronizeAsync(string serverName)
         {
             try
             {
                 LoggerSingleton.General.Info($"Starting the synchronization of '{serverName}' gateway.");
                 LoggerSingleton.General.Info($"Awaiting getting gateway RAP/Policy names for '{serverName}'.");
                 Console.WriteLine($"Get policies on {serverName}");
-                var taskGtRapNames = _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(serverName, true);
+                var taskGtRapNames = await _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(serverName, true);
                 LoggerSingleton.General.Info($"Awaiting getting gateway Local Group names for '{serverName}'.");
-                if (_gatewayLocalGroupSynchronizer.DownloadGatewayConfig(serverName, true))
+                if (await _gatewayLocalGroupSynchronizer.DownloadGatewayConfig(serverName, true))
                 {
-                    GatewayConfig gatewayCfg = Synchronizer.ReadGatewayConfigFromFile(serverName);
+                    GatewayConfig gatewayCfg = await Synchronizer.ReadGatewayConfigFromFile(serverName);
 
                     gatewayCfg = updateFlags(gatewayCfg);
 
                     var changedLocalGroups = Synchronizer.FilterChangedLocalGroups(gatewayCfg.LocalGroups);
 
-                    var addedGroups = _gatewayLocalGroupSynchronizer.SyncLocalGroups(changedLocalGroups, serverName);
+                    var addedGroups = await _gatewayLocalGroupSynchronizer.SyncLocalGroups(changedLocalGroups, serverName);
                     var allGatewayGroups = Synchronizer.GetAllGatewayGroupsAfterSynchronization(changedLocalGroups);
 
                     LoggerSingleton.General.Info($"Finished getting gateway RAP names for '{serverName}'.");
 
-                    _gatewayRapSynchronizer.SynchronizeRaps(serverName, allGatewayGroups, changedLocalGroups.LocalGroupsToDelete.Where(lg => lg.Name.StartsWith("LG-")).Select(lg => lg.Name).ToList(), taskGtRapNames);
+                    await _gatewayRapSynchronizer.SynchronizeRaps(serverName, allGatewayGroups, changedLocalGroups.LocalGroupsToDelete.Where(lg => lg.Name.StartsWith("LG-")).Select(lg => lg.Name).ToList(), taskGtRapNames);
                 }
                 LoggerSingleton.General.Info("Finished synchronization");
             }

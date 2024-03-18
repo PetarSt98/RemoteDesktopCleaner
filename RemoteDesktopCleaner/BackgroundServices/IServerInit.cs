@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {
-    public interface IDataRestoration
+    public interface IServerInit
     {
         Task SynchronizeAsync(string serverName);
     }
