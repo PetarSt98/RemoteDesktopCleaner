@@ -41,8 +41,6 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     LoggerSingleton.General.Info("Failed marking obsolete data in RemoteDesktop MySQL database. Existing one will be used.");
                     Console.WriteLine("Failed marking obsolete data in RemoteDesktop MySQL database. Existing one will be used.");
                 }
-
-                //var gatewaysToSynchronize = new List<string> { "cerngt01", "cerngt05", "cerngt06", "cerngt07" };
                 var synchronizationTasks = new List<Task>();
 
 

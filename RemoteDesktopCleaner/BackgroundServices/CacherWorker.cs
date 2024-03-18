@@ -29,9 +29,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             Console.WriteLine("Cleaner Worker is starting.");
             try
             {
-
-                //var gatewaysToSynchronize = new List<string>{ "cerngt01","cerngt05","cerngt06","cerngt07" };
-                var gatewaysToSynchronize = new List<string> { "cerngt08" };
+                var gatewaysToSynchronize = AppConfig.GetGatewaysInUse();
                 foreach (var gatewayName in gatewaysToSynchronize)
                 {
 

@@ -29,7 +29,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             try
             {
 
-                var gatewaysToSynchronize = new List<string>{ "cerngt07" };
+                var gatewaysToSynchronize = AppConfig.GetGatewaysInUse();
 
                 foreach (var gatewayName in gatewaysToSynchronize)
                 {
