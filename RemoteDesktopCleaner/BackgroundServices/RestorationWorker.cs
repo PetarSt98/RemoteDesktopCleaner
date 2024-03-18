@@ -37,15 +37,16 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     GlobalInstance.Instance.ObjectLists[gatewayName] = new ConcurrentDictionary<string, RAP_ResourceStatus>();
                     await _dataRestoration.SynchronizeAsync(gatewayName);
                 }
-                DatabaseSynchronizator databaseSynchronizator = new DatabaseSynchronizator();
-                databaseSynchronizator.AverageGatewayReults();
-                databaseSynchronizator.UpdateDatabase();
+
+                //DatabaseSynchronizator databaseSynchronizator = new DatabaseSynchronizator();
+                //databaseSynchronizator.AverageGatewayReults();
+                //databaseSynchronizator.UpdateDatabase();
 
 
-                using (var db = new RapContext())
-                {
-                    ConfigValidator.UpdateDatabase(db);
-                }
+                //using (var db = new RapContext())
+                //{
+                //    ConfigValidator.UpdateDatabase(db);
+                //}
 
             }
             catch (OperationCanceledException)
