@@ -5,7 +5,7 @@ using RemoteDesktopCleaner.Exceptions;
 using SynchronizerLibrary.CommonServices;
 using SynchronizerLibrary.Data;
 using SynchronizerLibrary.Loggers;
-
+using System.Security;
 
 namespace RemoteDesktopCleaner
 {
@@ -21,6 +21,7 @@ namespace RemoteDesktopCleaner
             services.AddSingleton<IConfigValidator, ConfigValidator>();
             services.AddSingleton<IGatewayRapSynchronizer, GatewayRapSynchronizer>();
             services.AddSingleton<IDataRestoration, DataRestoration>();
+            services.AddSingleton<IDataRemoval, DataRemoval>();
             services.AddSingleton<IServerInit, ServerInit>();
             services.AddSingleton<ISynchronizer, Synchronizer>();
             services.AddSingleton<IGatewayLocalGroupSynchronizer, GatewayLocalGroupSynchronizer>();
@@ -28,6 +29,7 @@ namespace RemoteDesktopCleaner
             services.AddSingleton<CacheWorker>();
             services.AddSingleton<RestorationWorker>();
             services.AddSingleton<GatewayInitWorker>();
+            services.AddSingleton<RemovalWorker>();
 
             var serviceProvider = services.BuildServiceProvider();
 
@@ -52,29 +54,60 @@ namespace RemoteDesktopCleaner
                 }
             }
         }
+
+        protected static void AnnounceStart()
+        {
+            try
+            {
+                string variableName = "CLEANER_STATUS";
+
+                string newValue = "ON";
+
+                Environment.SetEnvironmentVariable(variableName, newValue, EnvironmentVariableTarget.Machine);
+            }
+            catch (SecurityException)
+            {
+                Console.WriteLine("Error: Administrative privileges are required to modify system environment variables.");
+                Environment.Exit(1);
+            }
+}
+
+        protected static void AnnounceEnd()
+        {
+            try
+            {
+                string variableName = "CLEANER_STATUS";
+
+                string newValue = "OFF";
+
+                Environment.SetEnvironmentVariable(variableName, newValue, EnvironmentVariableTarget.Machine);
+            }
+            catch (SecurityException)
+            {
+                Console.WriteLine("Error: Administrative privileges are required to modify system environment variables.");
+                Environment.Exit(1);
+            }
+        }
+
     }
 
-#if PROGRAM || RELEASE
-    internal class Program: StaticFunctions
+#if CLEANER
+    internal class Clean: StaticFunctions
     {
         static async Task Main(string[] args)
         {
+            AnnounceStart();
             EnsureDirectoriesExist();
+
             var host = CreateHostBuilder(args).Build();
             try
             {
                 LoggerSingleton.General.Info("Starting RemoteDesktopCleaner console app");
                 Console.WriteLine("Starting RemoteDesktopCleaner console app");
 
-                //var serviceProvider = ConfigureServices();
-
-                //var cw = serviceProvider.GetRequiredService<SynchronizationWorker>();
                 await host.RunAsync();
 
-
-                Console.WriteLine("Starting initial cleaning");
-                //cw.StartAsync(new CancellationToken()).GetAwaiter().GetResult();
-
+                Console.WriteLine("Edning...");
             }
             catch (NoAccesToDomain)
             {
@@ -86,6 +119,10 @@ namespace RemoteDesktopCleaner
                 LoggerSingleton.General.Fatal(ex.Message);
                 Console.WriteLine(ex.Message);
             }
+            finally
+            {
+                AnnounceEnd();
+            }
         }
         protected static IServiceProvider ConfigureServices(IServiceCollection services)
         {
@@ -95,11 +132,15 @@ namespace RemoteDesktopCleaner
             services.AddSingleton<IConfigValidator, ConfigValidator>();
             services.AddSingleton<IGatewayRapSynchronizer, GatewayRapSynchronizer>();
             services.AddSingleton<IDataRestoration, DataRestoration>();
+            services.AddSingleton<IDataRemoval, DataRemoval>();
+            services.AddSingleton<IServerInit, ServerInit>();
             services.AddSingleton<ISynchronizer, Synchronizer>();
             services.AddSingleton<IGatewayLocalGroupSynchronizer, GatewayLocalGroupSynchronizer>();
             services.AddSingleton<SynchronizationWorker>();
             services.AddSingleton<CacheWorker>();
             services.AddSingleton<RestorationWorker>();
+            services.AddSingleton<GatewayInitWorker>();
+            services.AddSingleton<RemovalWorker>();
 
             var serviceProvider = services.BuildServiceProvider();
 
@@ -117,11 +158,13 @@ namespace RemoteDesktopCleaner
                 });
     }
 #endif
+
 #if CACHEDATA
     internal class CacheData: StaticFunctions
     {
         static void Main(string[] args)
         {
+            AnnounceStart();
             EnsureDirectoriesExist();
             try
             {
@@ -132,7 +175,7 @@ namespace RemoteDesktopCleaner
 
                 var cw = serviceProvider.GetRequiredService<CacheWorker>();
 
-                Console.WriteLine("Starting initial cleaning");
+                Console.WriteLine("Starting caching");
                 cw.StartAsync(new CancellationToken()).GetAwaiter().GetResult();
 
             }
@@ -146,14 +189,20 @@ namespace RemoteDesktopCleaner
                 LoggerSingleton.General.Fatal(ex.Message);
                 Console.WriteLine(ex.Message);
             }
+            finally
+            {
+                AnnounceEnd();
+            }
         }
     }
 #endif
+
 #if RESTOREDATA
     internal class RestoreData: StaticFunctions
     {
         static void Main(string[] args)
         {
+            AnnounceStart();
             EnsureDirectoriesExist();
             try
             {
@@ -164,7 +213,7 @@ namespace RemoteDesktopCleaner
 
                 var cw = serviceProvider.GetRequiredService<RestorationWorker>();
 
-                Console.WriteLine("Starting initial cleaning");
+                Console.WriteLine("Starting restoration");
                 cw.StartAsync(new CancellationToken()).GetAwaiter().GetResult();
 
             }
@@ -178,15 +227,58 @@ namespace RemoteDesktopCleaner
                 LoggerSingleton.General.Fatal(ex.Message);
                 Console.WriteLine(ex.Message);
             }
+            finally
+            {
+                AnnounceEnd();
+            }
         }
     }
 #endif
 
-#if DEBUG || SERVERINITDEBUG || SERVERINIT
+#if REMOVEDATA
+    internal class RemoveData: StaticFunctions
+    {
+        static void Main(string[] args)
+        {
+            AnnounceStart();
+            EnsureDirectoriesExist();
+            try
+            {
+                LoggerSingleton.General.Info("Starting RemoteDesktopCleaner console app");
+                Console.WriteLine("Starting RemoteDesktopCleaner console app");
+
+                var serviceProvider = ConfigureServices();
+
+                var cw = serviceProvider.GetRequiredService<RemovalWorker>();
+
+                Console.WriteLine("Starting removal");
+                cw.StartAsync(new CancellationToken()).GetAwaiter().GetResult();
+
+            }
+            catch (NoAccesToDomain)
+            {
+                LoggerSingleton.General.Fatal("Unable to access domain (to fetch admin usernames).");
+                Console.WriteLine("Unable to access domain (to fetch admin usernames).");
+            }
+            catch (Exception ex)
+            {
+                LoggerSingleton.General.Fatal(ex.Message);
+                Console.WriteLine(ex.Message);
+            }
+            finally
+            {
+                AnnounceEnd();
+            }
+        }
+    }
+#endif
+
+#if SERVERINITDEBUG || SERVERINIT
     internal class ServerInitialization: StaticFunctions
     {
         static void Main(string[] args)
         {
+            AnnounceStart();
             EnsureDirectoriesExist();
 
             try
@@ -198,7 +290,7 @@ namespace RemoteDesktopCleaner
 
                 var cw = serviceProvider.GetRequiredService<GatewayInitWorker>();
 
-                Console.WriteLine("Starting initial cleaning");
+                Console.WriteLine("Starting Server Initialization");
                 cw.StartAsync(new CancellationToken()).GetAwaiter().GetResult();
 
             }
@@ -211,6 +303,10 @@ namespace RemoteDesktopCleaner
             {
                 LoggerSingleton.General.Fatal(ex.Message);
                 Console.WriteLine(ex.Message);
+            }
+            finally
+            {
+                AnnounceEnd();
             }
         }
     }

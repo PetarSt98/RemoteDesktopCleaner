@@ -10,9 +10,10 @@ EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		CacheData|Any CPU = CacheData|Any CPU
+		Cleaner|Any CPU = Cleaner|Any CPU
 		Debug|Any CPU = Debug|Any CPU
-		Program|Any CPU = Program|Any CPU
 		Release|Any CPU = Release|Any CPU
+		RemoveData|Any CPU = RemoveData|Any CPU
 		RestoreData|Any CPU = RestoreData|Any CPU
 		ServerInit|Any CPU = ServerInit|Any CPU
 		ServerInitDebug|Any CPU = ServerInitDebug|Any CPU
@@ -20,12 +21,14 @@ Global
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.CacheData|Any CPU.ActiveCfg = CacheData|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.CacheData|Any CPU.Build.0 = CacheData|Any CPU
+		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Cleaner|Any CPU.ActiveCfg = Cleaner|Any CPU
+		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Cleaner|Any CPU.Build.0 = Cleaner|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Program|Any CPU.ActiveCfg = Program|Any CPU
-		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Program|Any CPU.Build.0 = Program|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Release|Any CPU.Build.0 = Release|Any CPU
+		{25B154A6-E8F6-4624-949D-AD0B8092A356}.RemoveData|Any CPU.ActiveCfg = RemoveData|Any CPU
+		{25B154A6-E8F6-4624-949D-AD0B8092A356}.RemoveData|Any CPU.Build.0 = RemoveData|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.RestoreData|Any CPU.ActiveCfg = RestoreData|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.RestoreData|Any CPU.Build.0 = RestoreData|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.ServerInit|Any CPU.ActiveCfg = ServerInit|Any CPU
@@ -34,12 +37,14 @@ Global
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.ServerInitDebug|Any CPU.Build.0 = ServerInit|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.CacheData|Any CPU.ActiveCfg = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.CacheData|Any CPU.Build.0 = Release|Any CPU
+		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Cleaner|Any CPU.ActiveCfg = Release|Any CPU
+		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Cleaner|Any CPU.Build.0 = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Program|Any CPU.ActiveCfg = Release|Any CPU
-		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Program|Any CPU.Build.0 = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.RemoveData|Any CPU.ActiveCfg = Release|Any CPU
+		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.RemoveData|Any CPU.Build.0 = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.RestoreData|Any CPU.ActiveCfg = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.RestoreData|Any CPU.Build.0 = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.ServerInit|Any CPU.ActiveCfg = Release|Any CPU

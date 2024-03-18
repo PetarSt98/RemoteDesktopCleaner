@@ -1,11 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup Condition="'$(Configuration)'=='Program'">
-    <DefineConstants>PROGRAM</DefineConstants>
+	
+  <PropertyGroup Condition="'$(Configuration)'=='Cleaner'">
+    <DefineConstants>CLEANER</DefineConstants>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='ProgramDebug'">
-    <DefineConstants>PROGRAM</DefineConstants>
-
-  </PropertyGroup>
+	
   <PropertyGroup Condition="'$(Configuration)'=='CacheData'">
     <DefineConstants>CACHEDATA</DefineConstants>
   </PropertyGroup>
@@ -14,9 +12,13 @@
     <DefineConstants>RESTOREDATA</DefineConstants>
   </PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)'=='ServerInit'">
-		<DefineConstants>SERVERINIT</DefineConstants>
-	</PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='RemoveData'">
+    <DefineConstants>REMOVEDATA</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='ServerInit'">
+	<DefineConstants>SERVERINIT</DefineConstants>
+  </PropertyGroup>
 	                                   
   
   <PropertyGroup>
@@ -26,7 +28,7 @@
     <Nullable>enable</Nullable>
     <TargetFrameworks></TargetFrameworks>
     <StartupObject></StartupObject>
-    <Configurations>Debug;Release;Program;CacheData;RestoreData;CleanerDebug;ProgramDebug;ServerInit;ServerInitDebug</Configurations>
+    <Configurations>Debug;Release;CacheData;RestoreData;ServerInit;ServerInitDebug;Cleaner;RemoveData</Configurations>
   </PropertyGroup>
 	<ItemGroup>
 	<PackageReference Include="Microsoft.Management.Infrastructure" Version="2.0.0" />

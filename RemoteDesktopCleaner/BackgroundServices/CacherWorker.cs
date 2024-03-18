@@ -25,8 +25,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             LoggerSingleton.General.Info("Cleaner Worker is starting.");
-            var gateways = AppConfig.GetGatewaysInUse();
-            Console.WriteLine("Cleaner Worker is starting.");
+            Console.WriteLine("Cache Worker is starting.");
             try
             {
                 var gatewaysToSynchronize = AppConfig.GetGatewaysInUse();

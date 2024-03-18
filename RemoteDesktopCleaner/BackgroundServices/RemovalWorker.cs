@@ -9,34 +9,43 @@ using System.Collections.Concurrent;
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {
-    public sealed class GatewayInitWorker : BackgroundService
+    public sealed class RemovalWorker : BackgroundService
     {
         private readonly IConfigValidator _configValidator;
-        private readonly IServerInit _serverInit;
+        private readonly IDataRemoval _dataRemoval;
 
-        public GatewayInitWorker(IServerInit serverInit, IConfigValidator configValidator)
+        public RemovalWorker(IDataRemoval dataRemoval, IConfigValidator configValidator)
         {
-            _serverInit = serverInit;
+            _dataRemoval = dataRemoval;
             _configValidator = configValidator;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             LoggerSingleton.General.Info("Cleaner Worker is starting.");
-            Console.WriteLine("ServerInit Worker is starting.");
-            var gateways = AppConfig.GetGatewaysInUse();
+            Console.WriteLine("Removal Worker is starting.");
             stoppingToken.Register(() => LoggerSingleton.General.Info("CleanerWorker background task is stopping."));
             try
             {
-
                 var gatewaysToSynchronize = AppConfig.GetGatewaysInUse();
+
                 foreach (var gatewayName in gatewaysToSynchronize)
                 {
 
                     GlobalInstance.Instance.Names.Add(gatewayName);
                     GlobalInstance.Instance.ObjectLists[gatewayName] = new ConcurrentDictionary<string, RAP_ResourceStatus>();
-                    await _serverInit.SynchronizeAsync(gatewayName);
+                    await _dataRemoval.SynchronizeAsync(gatewayName);
                 }
+                DatabaseSynchronizator databaseSynchronizator = new DatabaseSynchronizator();
+                databaseSynchronizator.AverageGatewayReults();
+                databaseSynchronizator.UpdateDatabase();
+
+
+                using (var db = new RapContext())
+                {
+                    ConfigValidator.UpdateDatabase(db);
+                }
+
             }
             catch (OperationCanceledException)
             {

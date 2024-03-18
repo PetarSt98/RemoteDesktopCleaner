@@ -28,9 +28,9 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 Console.WriteLine($"Get policies on {serverName}");
                 var taskGtRapNames = await _gatewayRapSynchronizer.GetGatewaysRapNamesAsync(serverName, false);
                 LoggerSingleton.General.Info($"Awaiting getting gateway Local Group names for '{serverName}'.");
-                if (await _gatewayLocalGroupSynchronizer.DownloadGatewayConfig(serverName, true))
+                if (await _gatewayLocalGroupSynchronizer.DownloadGatewayConfig(serverName,false))
                 {
-                    var cfgDiscrepancy = await GetConfigDiscrepancy(serverName); // fali update
+                    var cfgDiscrepancy = await GetConfigDiscrepancy(serverName);
                     var changedLocalGroups = FilterChangedLocalGroups(cfgDiscrepancy.LocalGroups); 
 
                     var addedGroups = await _gatewayLocalGroupSynchronizer.SyncLocalGroups(changedLocalGroups, serverName); 
@@ -68,7 +68,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return cfg;
         }
 
-        private static List<LocalGroup> GetGatewayLocalGroupsFromFile(string serverName)
+        public static List<LocalGroup> GetGatewayLocalGroupsFromFile(string serverName)
         {
             try
             {

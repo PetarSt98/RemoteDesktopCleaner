@@ -20,6 +20,19 @@ namespace RemoteDesktopCleaner
             }
         }
 
+        public static string GetRemovalGateway()
+        {
+            try
+            {
+                return ConfigurationManager.AppSettings["init-cleanup-gateway"];
+            }
+            catch (Exception ex)
+            {
+                LoggerSingleton.General.Error(ex, $"Failed getting removal gateways machines in use from config file.");
+                return "";
+            }
+        }
+
         public static string GetSyncLogSuffix()
         {
             return "-sync.log";
@@ -34,11 +47,6 @@ namespace RemoteDesktopCleaner
         public static string GetSyncLogDir()
         {
             return $@"{GetInfoDir()}\SyncLogs";
-        }
-
-        public static string GetAdminsEmail()
-        {
-            return ConfigurationManager.AppSettings["admins-email"];
         }
     }
 }

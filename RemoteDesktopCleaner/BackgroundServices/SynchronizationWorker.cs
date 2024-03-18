@@ -26,11 +26,9 @@ namespace RemoteDesktopCleaner.BackgroundServices
             Console.WriteLine("Cleaner Worker is starting.");
             var gatewaysToSynchronize = AppConfig.GetGatewaysInUse();
             stoppingToken.Register(() => LoggerSingleton.General.Info("CleanerWorker background task is stopping."));
-            //while (!stoppingToken.IsCancellationRequested)
-            //{
             try
             {
-                //Console.WriteLine($"Starting weekly synchronization for the following gateways: {string.Join(",", gatewaysToSynchronize)}");
+                Console.WriteLine($"Starting weekly synchronization for the following gateways: {string.Join(",", gatewaysToSynchronize)}");
                 if (_configValidator.MarkObsoleteData())
                 {
                     LoggerSingleton.General.Info("Successful marked obsolete data in RemoteDesktop MySQL database.");
@@ -41,6 +39,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     LoggerSingleton.General.Info("Failed marking obsolete data in RemoteDesktop MySQL database. Existing one will be used.");
                     Console.WriteLine("Failed marking obsolete data in RemoteDesktop MySQL database. Existing one will be used.");
                 }
+                
                 var synchronizationTasks = new List<Task>();
 
 
