@@ -54,9 +54,9 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 // Wait for all synchronization tasks to complete
                 await Task.WhenAll(synchronizationTasks);
 
-                DatabaseSynchronizator databaseSynchronizator = new DatabaseSynchronizator();
-                databaseSynchronizator.AverageGatewayReults();
-                databaseSynchronizator.UpdateDatabase();
+                //DatabaseSynchronizator databaseSynchronizator = new DatabaseSynchronizator();
+                //databaseSynchronizator.AverageGatewayReults();
+                //databaseSynchronizator.UpdateDatabase();
 
 
                 using (var db = new RapContext())
