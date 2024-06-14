@@ -16,10 +16,44 @@ namespace RemoteDesktopCleaner.BackgroundServices.ConfigurationValidation
             RAP_Resource
         }
 
-        private List<string>? users { get; set; }
-        private List<string>? computers { get; set; }
-        private FileType fileType { get; set; }
+        public List<string>? users { get; set; }
+        public List<string>? computers { get; set; }
+        public FileType fileType { get; set; }
         private string? report;
+
+
+        public CleaningEmailingService(List<string> users, FileType fileType)
+        {
+            if (this.users != null && this.users.Count > 0)
+            {
+                this.users.Clear();
+                this.users = null;
+            }
+
+            this.users = users;
+            this.fileType = fileType;
+
+        }
+
+        public CleaningEmailingService(List<string> users, List<string> computers, FileType fileType)
+        {
+            if (this.users != null && this.users.Count > 0)
+            {
+                this.users.Clear();
+                this.users = null;
+            }
+
+            if (this.computers != null && this.computers.Count > 0)
+            {
+                this.computers.Clear();
+                this.computers = null;
+            }
+
+            this.users = users;
+            this.computers = computers;
+            this.fileType = fileType;
+
+        }
 
         public void GenerateTextFile()
         {

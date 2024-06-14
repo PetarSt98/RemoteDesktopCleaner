@@ -4,7 +4,7 @@ using SynchronizerLibrary.Data;
 using RemoteDesktopCleaner.Exceptions;
 using SynchronizerLibrary.Loggers;
 using SynchronizerLibrary.SOAPservices;
-
+using RemoteDesktopCleaner.BackgroundServices.ConfigurationValidation;
 
 namespace RemoteDesktopCleaner.BackgroundServices
 {
@@ -18,6 +18,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
         private const string password = "GeForce9800GT.";
         private PrincipalSearchResult<Principal> members;
         private PrincipalContext domainContext;
+        private CleaningEmailingService cleaningEmailingService;
 
         public ConfigValidator()
         {
@@ -112,9 +113,23 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     Console.WriteLine("Finished validation of  DB RAPs and corresponding Resources.");
 
                     db.SaveChanges();
-                    var policiesToBeDeleted = db.raps.Where(r => (r.toDelete)).Select(r => r.name).ToList();
-                    var resourcesUserssToBeDeleted = db.rap_resource.Where(rr => (rr.toDelete)).Select(rr => rr.RAPName).ToList();
-                    var resourcesComputersToBeDeleted = db.rap_resource.Where(rr => (rr.toDelete)).Select(rr => rr.resourceName).ToList();
+
+                    try
+                    {
+                        var policiesToBeDeleted = db.raps.Where(r => (r.toDelete)).Select(r => r.name).ToList();
+                        var resourcesUsersToBeDeleted = db.rap_resource.Where(rr => (rr.toDelete)).Select(rr => rr.RAPName).ToList();
+                        var resourcesComputersToBeDeleted = db.rap_resource.Where(rr => (rr.toDelete)).Select(rr => rr.resourceName).ToList();
+
+                        cleaningEmailingService = new CleaningEmailingService(policiesToBeDeleted, CleaningEmailingService.FileType.RAP);
+                        cleaningEmailingService.SendEmail();
+
+                        cleaningEmailingService = new CleaningEmailingService(resourcesUsersToBeDeleted, resourcesComputersToBeDeleted, CleaningEmailingService.FileType.RAP_Resource);
+                        cleaningEmailingService.SendEmail();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Failed to send cleaning report email: {ex.Message}");
+                    }
 
                     domainContext.Dispose();
                     return true;
