@@ -99,7 +99,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                         else
                         {
                             ValidateRapResources(rapRow);
-                            if (HasNoValidResources(rapRow))
+                            if (false && HasNoValidResources(rapRow)) // Temp disabling this step till confirmed if needed
                             {
                                 LoggerSingleton.Raps.Info($"Login '{rapRow.login}' has no valid resources.");
                                 Console.WriteLine($"Login '{rapRow.login}' has no valid resources, mark it for deletion.");
@@ -284,7 +284,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
         }
 
-        private void ComputerExistsInActiveDirectory(string computerName)
+        public static void ComputerExistsInActiveDirectory(string computerName)
         {
             var domainEntry = new DirectoryEntry("LDAP://cern.ch/DC=cern,DC=ch");
             var domainSearcher = new DirectorySearcher(domainEntry);
@@ -396,11 +396,11 @@ namespace RemoteDesktopCleaner.BackgroundServices
         #endregion
 
         #region Validating RAPs
-        private bool ValidateRap(string login)
+        public static bool ValidateRap(string login)
         {
             return IsUserInActiveDirectory(login) || IsGroupInActiveDirectory(login);
         }
-        private bool IsUserInActiveDirectory(string login)
+        public static bool IsUserInActiveDirectory(string login)
         {
             UserPrincipal result;
             try
@@ -418,7 +418,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             }
                
         }
-        private bool IsGroupInActiveDirectory(string login)
+        public static bool IsGroupInActiveDirectory(string login)
         {
             GroupPrincipal result;
             try

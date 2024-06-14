@@ -21,6 +21,7 @@ namespace RemoteDesktopCleaner
             services.AddSingleton<IConfigValidator, ConfigValidator>();
             services.AddSingleton<IGatewayRapSynchronizer, GatewayRapSynchronizer>();
             services.AddSingleton<IDataRestoration, DataRestoration>();
+            services.AddSingleton<IDataLeveling, DataLeveling>();
             services.AddSingleton<IDataRemoval, DataRemoval>();
             services.AddSingleton<IServerInit, ServerInit>();
             services.AddSingleton<ISynchronizer, Synchronizer>();
@@ -29,6 +30,7 @@ namespace RemoteDesktopCleaner
             services.AddSingleton<CacheWorker>();
             services.AddSingleton<RestorationWorker>();
             services.AddSingleton<GatewayInitWorker>();
+            services.AddSingleton<LevelingWorker>();
             services.AddSingleton<RemovalWorker>();
 
             var serviceProvider = services.BuildServiceProvider();
@@ -57,6 +59,7 @@ namespace RemoteDesktopCleaner
 
         protected static void AnnounceStart()
         {
+            return;
             try
             {
                 string variableName = "CLEANER_STATUS";
@@ -197,7 +200,7 @@ namespace RemoteDesktopCleaner
     }
 #endif
 
-#if RESTOREDATA
+#if RESTOREDATA 
     internal class RestoreData: StaticFunctions
     {
         static void Main(string[] args)
@@ -312,4 +315,45 @@ namespace RemoteDesktopCleaner
     }
 #endif
 
+
+#if SYNCDBANDLGS || DEBUG || SYNCHRONIZEDBANDLGSDEBUG || LEVELLGSANDDB
+    internal class SyncDBandLGs : StaticFunctions
+    {
+        static void Main(string[] args)
+        {
+            AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+            {
+                LoggerSingleton.General.Fatal($"Unhandled exception: {e.ExceptionObject}");
+                Environment.FailFast($"Unhandled exception: {e.ExceptionObject}");
+                Console.WriteLine($"Unhandled exception: {e.ExceptionObject}");
+            };
+
+            EnsureDirectoriesExist();
+            try
+            {
+                LoggerSingleton.General.Info("Starting DB and LG Leveling console app");
+                Console.WriteLine("Starting DB and LG Leveling console app");
+
+                var serviceProvider = ConfigureServices();
+                var cw = serviceProvider.GetRequiredService<LevelingWorker>();
+
+                Console.WriteLine("Starting leveling.");
+                cw.StartWorkAsync(new CancellationToken()).GetAwaiter().GetResult();
+
+                Console.WriteLine("END");
+
+            }
+            catch (NoAccesToDomain)
+            {
+                LoggerSingleton.General.Fatal("Unable to access domain (to fetch admin usernames).");
+                Console.WriteLine("Unable to access domain (to fetch admin usernames).");
+            }
+            catch (Exception ex)
+            {
+                LoggerSingleton.General.Fatal(ex.Message);
+                Console.WriteLine(ex.Message);
+            }
+        }
+    }
+#endif
 }

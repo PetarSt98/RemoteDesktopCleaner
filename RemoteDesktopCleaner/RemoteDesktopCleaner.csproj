@@ -16,6 +16,10 @@
     <DefineConstants>REMOVEDATA</DefineConstants>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)'=='SynchronizeDBandLGs'">
+    <DefineConstants>REMOVEDATA</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)'=='ServerInit'">
 	<DefineConstants>SERVERINIT</DefineConstants>
   </PropertyGroup>
@@ -28,7 +32,7 @@
     <Nullable>enable</Nullable>
     <TargetFrameworks></TargetFrameworks>
     <StartupObject></StartupObject>
-    <Configurations>Debug;Release;CacheData;RestoreData;ServerInit;ServerInitDebug;Cleaner;RemoveData</Configurations>
+    <Configurations>Debug;Release;CacheData;RestoreData;ServerInit;ServerInitDebug;Cleaner;RemoveData;SynchronizeDBandLGs;SynchronizeDBandLGsDebug;LevelLGsandDB</Configurations>
   </PropertyGroup>
 	<ItemGroup>
 	<PackageReference Include="Microsoft.Management.Infrastructure" Version="2.0.0" />

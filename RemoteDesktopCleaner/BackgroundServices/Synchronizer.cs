@@ -73,14 +73,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
             try
             {
                 var localGroups = new List<LocalGroup>();
-                var dstDir = AppConfig.GetInfoDir();
-                //var path = serverName + ".json";
-                //var content = File.ReadAllText(path);
+
                 LoggerSingleton.SynchronizedLocalGroups.Debug($"Reading local groups for '{serverName}' from file.");
                 LoggerSingleton.General.Debug($"Reading local groups for '{serverName}' from file.");
-                //localGroups.AddRange(Newtonsoft.Json.JsonConvert.DeserializeObject<List<LocalGroup>>(content));
+                Console.WriteLine($"Reading local groups for '{serverName}' from file.");
 
                 localGroups.AddRange(Cacher.LoadLocalGroupCacheFromFile(serverName));
+
                 return localGroups;
             }
             catch (Exception ex)

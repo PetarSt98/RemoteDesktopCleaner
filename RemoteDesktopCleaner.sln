@@ -12,11 +12,13 @@ Global
 		CacheData|Any CPU = CacheData|Any CPU
 		Cleaner|Any CPU = Cleaner|Any CPU
 		Debug|Any CPU = Debug|Any CPU
+		LevelLGsandDB|Any CPU = LevelLGsandDB|Any CPU
 		Release|Any CPU = Release|Any CPU
 		RemoveData|Any CPU = RemoveData|Any CPU
 		RestoreData|Any CPU = RestoreData|Any CPU
 		ServerInit|Any CPU = ServerInit|Any CPU
 		ServerInitDebug|Any CPU = ServerInitDebug|Any CPU
+		SynchronizeDBandLGsDebug|Any CPU = SynchronizeDBandLGsDebug|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.CacheData|Any CPU.ActiveCfg = CacheData|Any CPU
@@ -25,6 +27,8 @@ Global
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Cleaner|Any CPU.Build.0 = Cleaner|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{25B154A6-E8F6-4624-949D-AD0B8092A356}.LevelLGsandDB|Any CPU.ActiveCfg = LevelLGsandDB|Any CPU
+		{25B154A6-E8F6-4624-949D-AD0B8092A356}.LevelLGsandDB|Any CPU.Build.0 = LevelLGsandDB|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.Release|Any CPU.Build.0 = Release|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.RemoveData|Any CPU.ActiveCfg = RemoveData|Any CPU
@@ -35,12 +39,16 @@ Global
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.ServerInit|Any CPU.Build.0 = ServerInit|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.ServerInitDebug|Any CPU.ActiveCfg = ServerInit|Any CPU
 		{25B154A6-E8F6-4624-949D-AD0B8092A356}.ServerInitDebug|Any CPU.Build.0 = ServerInit|Any CPU
+		{25B154A6-E8F6-4624-949D-AD0B8092A356}.SynchronizeDBandLGsDebug|Any CPU.ActiveCfg = SynchronizeDBandLGsDebug|Any CPU
+		{25B154A6-E8F6-4624-949D-AD0B8092A356}.SynchronizeDBandLGsDebug|Any CPU.Build.0 = SynchronizeDBandLGsDebug|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.CacheData|Any CPU.ActiveCfg = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.CacheData|Any CPU.Build.0 = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Cleaner|Any CPU.ActiveCfg = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Cleaner|Any CPU.Build.0 = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.LevelLGsandDB|Any CPU.ActiveCfg = Release|Any CPU
+		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.LevelLGsandDB|Any CPU.Build.0 = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.Release|Any CPU.Build.0 = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.RemoveData|Any CPU.ActiveCfg = Release|Any CPU
@@ -51,6 +59,8 @@ Global
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.ServerInit|Any CPU.Build.0 = Release|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.ServerInitDebug|Any CPU.ActiveCfg = Debug|Any CPU
 		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.ServerInitDebug|Any CPU.Build.0 = Debug|Any CPU
+		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.SynchronizeDBandLGsDebug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E82671BE-0022-49DB-BF16-97DDC9D0AE5C}.SynchronizeDBandLGsDebug|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
