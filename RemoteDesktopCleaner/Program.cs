@@ -94,7 +94,7 @@ namespace RemoteDesktopCleaner
 
     }
 
-#if CLEANER
+#if CLEANER || DEBUG
     internal class Clean: StaticFunctions
     {
         static async Task Main(string[] args)
@@ -316,7 +316,7 @@ namespace RemoteDesktopCleaner
 #endif
 
 
-#if SYNCDBANDLGS || DEBUG || SYNCHRONIZEDBANDLGSDEBUG || LEVELLGSANDDB
+#if SYNCDBANDLGS || SYNCHRONIZEDBANDLGSDEBUG || LEVELLGSANDDB
     internal class SyncDBandLGs : StaticFunctions
     {
         static void Main(string[] args)

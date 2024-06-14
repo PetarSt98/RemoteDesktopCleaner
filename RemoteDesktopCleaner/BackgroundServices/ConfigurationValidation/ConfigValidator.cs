@@ -116,18 +116,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
                     try
                     {
-                        var policiesToBeDeleted = db.raps.Where(r => (r.toDelete)).Select(r => r.name).ToList();
-                        var resourcesUsersToBeDeleted = db.rap_resource.Where(rr => (rr.toDelete)).Select(rr => rr.RAPName).ToList();
-                        var resourcesComputersToBeDeleted = db.rap_resource.Where(rr => (rr.toDelete)).Select(rr => rr.resourceName).ToList();
-
-                        cleaningEmailingService = new CleaningEmailingService(policiesToBeDeleted, CleaningEmailingService.FileType.RAP);
-                        string reportRap = cleaningEmailingService.GenerateTextFile();
-
-                        cleaningEmailingService = new CleaningEmailingService(resourcesUsersToBeDeleted, resourcesComputersToBeDeleted, CleaningEmailingService.FileType.RAP_Resource);
-                        string reportRapResource = cleaningEmailingService.GenerateTextFile();
-
-                        cleaningEmailingService.ConcatenateReports(reportRap, reportRapResource);
-                        cleaningEmailingService.SendEmail();
+                        NotifyAdmins(db);
                     }
                     catch (Exception ex)
                     {
@@ -144,6 +133,23 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 return false;
             }
         }
+
+        private void NotifyAdmins(RapContext db)
+        {
+            var policiesToBeDeleted = db.raps.Where(r => (r.toDelete)).Select(r => r.name).ToList();
+            var resourcesUsersToBeDeleted = db.rap_resource.Where(rr => (rr.toDelete)).Select(rr => rr.RAPName).ToList();
+            var resourcesComputersToBeDeleted = db.rap_resource.Where(rr => (rr.toDelete)).Select(rr => rr.resourceName).ToList();
+
+            cleaningEmailingService = new CleaningEmailingService(policiesToBeDeleted, CleaningEmailingService.FileType.RAP);
+            string reportRap = cleaningEmailingService.GenerateTextFile();
+
+            cleaningEmailingService = new CleaningEmailingService(resourcesUsersToBeDeleted, resourcesComputersToBeDeleted, CleaningEmailingService.FileType.RAP_Resource);
+            string reportRapResource = cleaningEmailingService.GenerateTextFile();
+
+            cleaningEmailingService.ConcatenateReports(reportRap, reportRapResource);
+            cleaningEmailingService.SendEmail();
+        }
+
         #endregion
 
         #region Validate RAP_Resources
@@ -179,6 +185,12 @@ namespace RemoteDesktopCleaner.BackgroundServices
 
         private void ConsumeValidationResult(rap rapRow, rap_resource resource, PolicyValidationResult result)
         {
+            if (result.FailureDetail == FailureDetail.NoFailure)
+            {
+                resource.invalid = false;
+                return;
+            }
+
             if (result.FailureDetail == FailureDetail.ValidationException)
             {
                 if (result.Invalid)
@@ -226,12 +238,17 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 using (var domainContext = new PrincipalContext(ContextType.Domain, DomainName))
                 {
                     ComputerExistsInActiveDirectory(computerName);
-                    rapOwnerPrincipal = GetRapOwnerFromActiveDirectory(domainContext, rapOwner);
+
+                    GetRapOwnerFromActiveDirectory(domainContext, rapOwner);
+
+                    validationResult.Invalid = false;
+                    validationResult.Message = "All ok";
+                    validationResult.FailureDetail = FailureDetail.NoFailure;
 
                     //if (IsPolicyAnException(rapOwner, login, computerName, resource))
                     //    return new PolicyValidationResult(true);
 
-                    Dictionary<string, string> deviceInfo = Task.Run(() => SOAPMethods.ExecutePowerShellSOAPScript(computerName, rapOwner.Replace("RAP_", ""))).Result;
+                    //Dictionary<string, string> deviceInfo = Task.Run(() => SOAPMethods.ExecutePowerShellSOAPScript(computerName, rapOwner.Replace("RAP_", ""))).Result;
 
                     //bool bNetworkOk = CheckDeviceDomainInterfaces(deviceInfo);
                     //bool isNiceMember = IsUserNiceGroupMember(domainContext, rapOwnerPrincipal);
@@ -244,25 +261,26 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     //else if (bNetworkOk)
                     //    return new PolicyValidationResult(false, "Good resource");
 
-                    bool isUserAllowed = IsRapOwnerResponsible(domainContext, rapOwnerPrincipal, deviceInfo);
-                    switch (isUserAllowed)
-                    {
-                        case false:
-                            var msg =
-                                $"RAP owner '{rapOwner}' is not the responsible/user for the computer '{computerName}'.";
-                            LoggerSingleton.Raps.Warn(msg);
-                            break;
-                        //case true when bNetworkOk:
-                        //    return new PolicyValidationResult(false, "Rap owner is responsible, network domain name allowed ");
-                        //case true when !bNetworkOk:
-                        //    return new PolicyValidationResult(true, "Rap owner is responsible, network domain name not allowed ");
-                        case true:
-                            return new PolicyValidationResult(true, "Rap owner is responsible");
-                        default:
-                            LoggerSingleton.Raps.Warn($"Account '{rapOwner}' is not allowed to manage computer '{computerName}'.");
-                            //throw new InvalidPolicyException();
-                            break;
-                    }
+                    //bool isUserAllowed = IsRapOwnerResponsible(domainContext, rapOwnerPrincipal, deviceInfo);
+                    //switch (isUserAllowed)
+                    //{
+                    //    case false:
+                    //        var msg =
+                    //            $"RAP owner '{rapOwner}' is not the responsible/user for the computer '{computerName}'.";
+                    //        LoggerSingleton.Raps.Warn(msg);
+                    //        break;
+                    //    //case true when bNetworkOk:
+                    //    //    return new PolicyValidationResult(false, "Rap owner is responsible, network domain name allowed ");
+                    //    //case true when !bNetworkOk:
+                    //    //    return new PolicyValidationResult(true, "Rap owner is responsible, network domain name not allowed ");
+                    //    case true:
+                    //        return new PolicyValidationResult(true, "Rap owner is responsible");
+                    //    default:
+                    //        LoggerSingleton.Raps.Warn($"Account '{rapOwner}' is not allowed to manage computer '{computerName}'.");
+                    //        //throw new InvalidPolicyException();
+                    //        break;
+                    //}
+
                 }
 
             }
@@ -270,6 +288,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             {
                 LoggerSingleton.Raps.Warn($"Warning while validating policy: {validatorEx.Message}");
                 validationResult.FailureDetail = FailureDetail.ValidationException;
+                validationResult.Invalid = true;
             }
             catch (ComputerNotFoundInActiveDirectoryException ex)
             {
@@ -328,11 +347,22 @@ namespace RemoteDesktopCleaner.BackgroundServices
             return true;
         }
 
-        private UserPrincipal GetRapOwnerFromActiveDirectory(PrincipalContext domainContext, string rapOwner)
+        private void GetRapOwnerFromActiveDirectory(PrincipalContext domainContext, string rapOwner)
         {
-            var rapOwnerPrincipal = UserPrincipal.FindByIdentity(domainContext, rapOwner);
-            if (rapOwnerPrincipal != null) return rapOwnerPrincipal;
+            try
+            {
+                var rapOwnerPrincipal = UserPrincipal.FindByIdentity(domainContext, rapOwner);
+                if (rapOwnerPrincipal != null) return;
+                var rapOwnerPrincipalGroup = GroupPrincipal.FindByIdentity(domainContext, rapOwner);
+                if (rapOwnerPrincipalGroup != null) return;
 
+
+            }
+            catch (Exception ex)
+            {
+                LoggerSingleton.Raps.Warn(ex.Message);
+                Console.WriteLine(ex.Message);
+            }
             var errorMessage = $"RAP owner '{rapOwner}' not found in Active Directory.";
             LoggerSingleton.Raps.Warn(errorMessage);
             throw new ValidatorException(errorMessage);

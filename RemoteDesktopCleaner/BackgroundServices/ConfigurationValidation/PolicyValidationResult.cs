@@ -6,7 +6,8 @@ namespace RemoteDesktopCleaner.BackgroundServices
     {
         ValidationException,
         LoginNotFound,
-        ComputerNotFound
+        ComputerNotFound,
+        NoFailure
     }
 
     public class PolicyValidationResult
