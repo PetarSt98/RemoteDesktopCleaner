@@ -112,6 +112,10 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     Console.WriteLine("Finished validation of  DB RAPs and corresponding Resources.");
 
                     db.SaveChanges();
+                    var policiesToBeDeleted = db.raps.Where(r => (r.toDelete)).Select(r => r.name).ToList();
+                    var resourcesUserssToBeDeleted = db.rap_resource.Where(rr => (rr.toDelete)).Select(rr => rr.RAPName).ToList();
+                    var resourcesComputersToBeDeleted = db.rap_resource.Where(rr => (rr.toDelete)).Select(rr => rr.resourceName).ToList();
+
                     domainContext.Dispose();
                     return true;
                 }
@@ -173,7 +177,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
             else if (result.FailureDetail == FailureDetail.LoginNotFound)
             {
                 DisableResource(resource);
-                SetRapEnabledFalseIfNoAccessibleResources(rapRow);
+                SetRapEnabledFalseIfNoAccessibleResources(rapRow); // Nice feature but overengineered
             }
 
             if (resource.invalid != result.Invalid)
@@ -212,13 +216,13 @@ namespace RemoteDesktopCleaner.BackgroundServices
                     Dictionary<string, string> deviceInfo = Task.Run(() => SOAPMethods.ExecutePowerShellSOAPScript(computerName, rapOwner.Replace("RAP_", ""))).Result;
 
                     //bool bNetworkOk = CheckDeviceDomainInterfaces(deviceInfo);
-                    bool isNiceMember = IsUserNiceGroupMember(domainContext, rapOwnerPrincipal);
-                    if (!isNiceMember)
-                    {
-                        var msg = $"User Account '{login}' not found in the nice local administrator managers group.";
-                        LoggerSingleton.Raps.Warn(msg);
-                        Console.WriteLine(msg);
-                    }
+                    //bool isNiceMember = IsUserNiceGroupMember(domainContext, rapOwnerPrincipal);
+                    //if (!isNiceMember)
+                    //{
+                    //    var msg = $"User Account '{login}' not found in the nice local administrator managers group.";
+                    //    LoggerSingleton.Raps.Warn(msg);
+                    //    Console.WriteLine(msg);
+                    //}
                     //else if (bNetworkOk)
                     //    return new PolicyValidationResult(false, "Good resource");
 
