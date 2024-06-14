@@ -121,9 +121,12 @@ namespace RemoteDesktopCleaner.BackgroundServices
                         var resourcesComputersToBeDeleted = db.rap_resource.Where(rr => (rr.toDelete)).Select(rr => rr.resourceName).ToList();
 
                         cleaningEmailingService = new CleaningEmailingService(policiesToBeDeleted, CleaningEmailingService.FileType.RAP);
-                        cleaningEmailingService.SendEmail();
+                        string reportRap = cleaningEmailingService.GenerateTextFile();
 
                         cleaningEmailingService = new CleaningEmailingService(resourcesUsersToBeDeleted, resourcesComputersToBeDeleted, CleaningEmailingService.FileType.RAP_Resource);
+                        string reportRapResource = cleaningEmailingService.GenerateTextFile();
+
+                        cleaningEmailingService.ConcatenateReports(reportRap, reportRapResource);
                         cleaningEmailingService.SendEmail();
                     }
                     catch (Exception ex)

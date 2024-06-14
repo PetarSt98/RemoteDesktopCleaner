@@ -19,7 +19,7 @@ namespace RemoteDesktopCleaner.BackgroundServices.ConfigurationValidation
         public List<string>? users { get; set; }
         public List<string>? computers { get; set; }
         public FileType fileType { get; set; }
-        private string? report;
+        public string? report;
 
 
         public CleaningEmailingService(List<string> users, FileType fileType)
@@ -49,43 +49,63 @@ namespace RemoteDesktopCleaner.BackgroundServices.ConfigurationValidation
                 this.computers = null;
             }
 
+            if (computers.Count != users.Count)
+            {
+                throw new Exception("Invalid configuration order (number of devices and users should be equal) in cleaning email service!");
+            }
+
             this.users = users;
             this.computers = computers;
             this.fileType = fileType;
-
         }
 
-        public void GenerateTextFile()
+        public string GenerateTextFile()
         {
             StringWriter stringWriter = new StringWriter();
 
             if (fileType == FileType.RAP && users != null) {
+                stringWriter.WriteLine("==========================================");
+                stringWriter.WriteLine($"List of deleted RAPs:");
                 stringWriter.WriteLine("------------------------------------------");
-                stringWriter.WriteLine($"List of deleted Users-RAPs:");
 
                 foreach (string user in users)
                 {
-                    stringWriter.WriteLine(user);
+                    stringWriter.WriteLine($"User: {user}\n");
                 }
-                stringWriter.WriteLine("------------------------------------------");
             }
 
             if (fileType == FileType.RAP_Resource && users != null && computers != null)
             {
-                stringWriter.WriteLine("------------------------------------------");
+                stringWriter.WriteLine("==========================================");
                 stringWriter.WriteLine($"List of deleted Configurations:");
+                stringWriter.WriteLine("------------------------------------------");
 
                 var configurations = users.Zip(computers, (first, second) => new { user = first, computer = second });
 
 
                 foreach (var configuration in configurations)
                 {
-                    stringWriter.WriteLine($"Deleted Configuration: User - {configuration.user}  Device - {configuration.computer}");
+                    stringWriter.WriteLine($"User: {configuration.user}  Device: {configuration.computer}\n");
                 }
-                stringWriter.WriteLine("------------------------------------------");
             }
 
-            report = stringWriter.ToString();
+            if (report == null || report.Length == 0)
+            {
+                report = stringWriter.ToString();
+            }
+            else
+            {
+                report += '\n';
+                report += stringWriter.ToString();
+            }
+
+            return report;
+        }
+
+        public void ConcatenateReports(string reportRap, string reportRapResource)
+        {
+            report = reportRap + '\n' + reportRapResource;
+
         }
 
         public void SendEmail()
