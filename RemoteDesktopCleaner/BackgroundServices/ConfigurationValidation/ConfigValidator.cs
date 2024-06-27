@@ -238,12 +238,15 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 using (var domainContext = new PrincipalContext(ContextType.Domain, DomainName))
                 {
                     ComputerExistsInActiveDirectory(computerName);
-
-                    GetRapOwnerFromActiveDirectory(domainContext, rapOwner);
+                    
+                    // Checks if owner is valid, if not, marks device as invalid. Pablo said to remove this as it is not needed
+                    // GetRapOwnerFromActiveDirectory(domainContext, rapOwner);
 
                     validationResult.Invalid = false;
                     validationResult.Message = "All ok";
                     validationResult.FailureDetail = FailureDetail.NoFailure;
+
+                    // Checks if owner is valid, if not, marks device as invalid. Pablo said to remove this as it is not needed
 
                     //if (IsPolicyAnException(rapOwner, login, computerName, resource))
                     //    return new PolicyValidationResult(true);
