@@ -59,7 +59,6 @@ namespace RemoteDesktopCleaner
 
         protected static void AnnounceStart()
         {
-            return;
             try
             {
                 string variableName = "CLEANER_STATUS";
@@ -67,6 +66,9 @@ namespace RemoteDesktopCleaner
                 string newValue = "ON";
 
                 Environment.SetEnvironmentVariable(variableName, newValue, EnvironmentVariableTarget.Machine);
+
+                Console.WriteLine("Cleaner flag is ON");
+                LoggerSingleton.General.Info("Cleaner flag is ON");
             }
             catch (SecurityException)
             {
@@ -84,6 +86,8 @@ namespace RemoteDesktopCleaner
                 string newValue = "OFF";
 
                 Environment.SetEnvironmentVariable(variableName, newValue, EnvironmentVariableTarget.Machine);
+
+                LoggerSingleton.General.Info("Cleaner flag is OFF");
             }
             catch (SecurityException)
             {
@@ -94,7 +98,7 @@ namespace RemoteDesktopCleaner
 
     }
 
-#if CLEANER || DEBUG
+#if CLEANER || DEBUG || RELEASE
     internal class Clean: StaticFunctions
     {
         static async Task Main(string[] args)
@@ -105,6 +109,7 @@ namespace RemoteDesktopCleaner
             var host = CreateHostBuilder(args).Build();
             try
             {
+                AnnounceStart();
                 LoggerSingleton.General.Info("Starting RemoteDesktopCleaner console app");
                 Console.WriteLine("Starting RemoteDesktopCleaner console app");
 

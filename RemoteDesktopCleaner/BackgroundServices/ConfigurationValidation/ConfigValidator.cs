@@ -66,7 +66,7 @@ namespace RemoteDesktopCleaner.BackgroundServices
                 return true;
             }
             LoggerSingleton.General.Info("Started validation of  DB RAPs and corresponding Resources.");
-            Console.WriteLine("Started validation of  DB RAPs and corresponding Resources.");
+            Console.WriteLine("Started validation of DB RAPs and corresponding Resources.");
             var raps = new List<rap>();
             try
             {
